@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: service-order-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+      MIGRATE_ON_STARTUP: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - service-order-network
+    volumes:
+      - .:/app
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: service-order-postgres
+    environment:
+      POSTGRES_DB: service_order_db
+      POSTGRES_USER: service_order_user
+      POSTGRES_PASSWORD: service_order_password
+    ports:
+      - "5432:5432"
+    networks:
+      - service-order-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U service_order_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  service-order-network:
+    driver: bridge

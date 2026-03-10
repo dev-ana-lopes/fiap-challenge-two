@@ -1,0 +1,45 @@
+from datetime import datetime, timedelta
+from typing import Any
+
+from jose import JWTError, jwt
+
+from ..config.settings import Settings
+
+
+class JwtService:
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def create_token(self, user_id: str, email: str) -> str:
+        expire = datetime.utcnow() + timedelta(
+            minutes=self.settings.JWT_EXPIRATION_MINUTES
+        )
+        payload = {
+            "user_id": user_id,
+            "email": email,
+            "exp": expire,
+        }
+        token = jwt.encode(
+            payload,
+            self.settings.JWT_SECRET,
+            algorithm=self.settings.JWT_ALGORITHM,
+        )
+        return token
+
+    def verify_token(self, token: str) -> dict[str, Any] | None:
+        try:
+            payload = jwt.decode(
+                token,
+                self.settings.JWT_SECRET,
+                algorithms=[self.settings.JWT_ALGORITHM],
+            )
+            return payload
+        except JWTError:
+            return None
+
+    def get_user_id_from_token(self, token: str) -> str | None:
+        payload = self.verify_token(token)
+        if payload is None:
+            return None
+        return payload.get("user_id")
