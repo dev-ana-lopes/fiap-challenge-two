@@ -1,6 +1,8 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.part_item import PartItem
@@ -27,6 +29,8 @@ class PostgresServiceOrderRepository(ServiceOrderRepository):
             customer_id=service_order.customer_id,
             vehicle_id=service_order.vehicle_id,
             status=service_order.status.value,
+            started_at=service_order.started_at,
+            finished_at=service_order.finished_at,
             created_at=service_order.created_at,
             updated_at=service_order.updated_at,
         )
@@ -114,6 +118,8 @@ class PostgresServiceOrderRepository(ServiceOrderRepository):
             status=ServiceOrderStatus(model.status),
             created_at=model.created_at,
             updated_at=model.updated_at,
+            started_at=model.started_at,
+            finished_at=model.finished_at,
             service_items=service_items,
             part_items=part_items,
         )
@@ -131,10 +137,45 @@ class PostgresServiceOrderRepository(ServiceOrderRepository):
             model.status = status.value
             await self.session.commit()
 
+    async def set_started_at(self, service_order_id: UUID) -> None:
+        result = await self.session.execute(
+            select(ServiceOrderModel).where(ServiceOrderModel.id == service_order_id)
+        )
+        model = result.scalar_one_or_none()
+        if model and model.started_at is None:
+            model.started_at = datetime.utcnow()
+            await self.session.commit()
+
+    async def set_finished_at(self, service_order_id: UUID) -> None:
+        result = await self.session.execute(
+            select(ServiceOrderModel).where(ServiceOrderModel.id == service_order_id)
+        )
+        model = result.scalar_one_or_none()
+        if model and model.finished_at is None:
+            model.finished_at = datetime.utcnow()
+            await self.session.commit()
+
+    async def get_average_execution_time_seconds(self) -> float | None:
+        result = await self.session.execute(
+            select(
+                func.avg(
+                    func.extract(
+                        "epoch", ServiceOrderModel.finished_at - ServiceOrderModel.started_at
+                    )
+                )
+            ).where(
+                ServiceOrderModel.started_at.is_not(None),
+                ServiceOrderModel.finished_at.is_not(None),
+            )
+        )
+        avg_seconds = result.scalar_one_or_none()
+        return float(avg_seconds) if avg_seconds is not None else None
+
     async def list_active(self) -> list[ServiceOrder]:
         excluded_statuses = [
             ServiceOrderStatus.FINISHED.value,
             ServiceOrderStatus.DELIVERED.value,
+            ServiceOrderStatus.CANCELLED.value,
         ]
         query = (
             select(ServiceOrderModel)
@@ -193,6 +234,8 @@ class PostgresServiceOrderRepository(ServiceOrderRepository):
                     status=ServiceOrderStatus(model.status),
                     created_at=model.created_at,
                     updated_at=model.updated_at,
+                    started_at=model.started_at,
+                    finished_at=model.finished_at,
                     service_items=service_items,
                     part_items=part_items,
                 )

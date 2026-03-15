@@ -8,3 +8,4 @@ class ServiceOrderStatus(str, Enum):
     IN_PROGRESS = "IN_PROGRESS"
     FINISHED = "FINISHED"
     DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"

@@ -1,4 +1,11 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from ...domain.validation import (
+    is_valid_br_plate,
+    is_valid_cpf_cnpj,
+    normalize_digits,
+    normalize_plate,
+)
 
 
 class LoginRequest(BaseModel):
@@ -31,16 +38,49 @@ class PartItemRequest(BaseModel):
     quantity: int = Field(..., ge=1)
 
 
+class PartRefRequest(BaseModel):
+    part_id: str
+    quantity: int = Field(..., ge=1)
+
+
 class CreateServiceOrderRequest(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=255)
+    customer_cpf_cnpj: str | None = None
     customer_email: EmailStr
     customer_phone: str = Field(..., min_length=1, max_length=20)
     vehicle_brand: str = Field(..., min_length=1, max_length=100)
     vehicle_model: str = Field(..., min_length=1, max_length=100)
     vehicle_year: int = Field(..., ge=1900, le=2100)
     vehicle_plate: str = Field(..., min_length=1, max_length=20)
-    services: list[ServiceItemRequest] = Field(..., min_items=1)
-    parts: list[PartItemRequest] = Field(..., min_items=0)
+    services: list[ServiceItemRequest] | None = None
+    parts: list[PartItemRequest] | None = None
+    service_ids: list[str] | None = None
+    part_refs: list[PartRefRequest] | None = None
+
+    @field_validator("customer_cpf_cnpj")
+    @classmethod
+    def validate_cpf_cnpj(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not is_valid_cpf_cnpj(v):
+            raise ValueError("Invalid CPF/CNPJ")
+        return normalize_digits(v)
+
+    @field_validator("vehicle_plate")
+    @classmethod
+    def validate_plate(cls, v: str) -> str:
+        if not is_valid_br_plate(v):
+            raise ValueError("Invalid vehicle plate")
+        return normalize_plate(v)
+
+    @field_validator("service_ids")
+    @classmethod
+    def validate_service_ids(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        if len(v) < 1:
+            raise ValueError("service_ids must have at least 1 item")
+        return v
 
 
 class CreateServiceOrderResponse(BaseModel):
@@ -80,3 +120,4 @@ class ServiceOrderResponse(BaseModel):
     created_at: str
     service_items: list[ServiceItemResponse]
     part_items: list[PartItemResponse]
+

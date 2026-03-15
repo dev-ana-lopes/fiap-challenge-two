@@ -10,14 +10,14 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from src.infrastructure.database.models.base import Base
+from src.infrastructure.database import models
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+target_metadata = models.Base.metadata
 
 
 def _get_sqlalchemy_url() -> str:

@@ -1,0 +1,669 @@
+{
+  "info": {
+    "name": "Service Order Management API — QA Workspace",
+    "_postman_id": "a5a6fbb9-7f7d-4f4b-aee5-0aa8a88d8a50",
+    "description": "End-to-end + negative tests for Service Order Management API (FastAPI).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level defaults (idempotent): user_email + user_password",
+          "const now = Date.now();",
+          "const namespace = (pm.environment.get('testmail_namespace') || '').trim();",
+          "const email = pm.environment.get('user_email');",
+          "if (!email || email.trim() === '') {",
+          "  const generatedUserEmail = namespace ? `${namespace}.auth-${now}@inbox.testmail.app` : `qa_${now}@example.com`;",
+          "  pm.environment.set('user_email', generatedUserEmail);",
+          "}",
+          "const orderCustomerEmail = pm.environment.get('service_order_customer_email');",
+          "if (!orderCustomerEmail || orderCustomerEmail.trim() === '') {",
+          "  const generatedOrderEmail = namespace ? `${namespace}.service-order-${now}@inbox.testmail.app` : `qa.customer.${now}@example.com`;",
+          "  pm.environment.set('service_order_customer_email', generatedOrderEmail);",
+          "}",
+          "const customerCrudEmail = pm.environment.get('customer_crud_email');",
+          "if (!customerCrudEmail || customerCrudEmail.trim() === '') {",
+          "  const generatedCustomerEmail = namespace ? `${namespace}.customer-${now}@inbox.testmail.app` : `qa_customers_${now}@example.com`;",
+          "  pm.environment.set('customer_crud_email', generatedCustomerEmail);",
+          "}",
+          "const customerCrudUpdatedEmail = pm.environment.get('customer_crud_updated_email');",
+          "if (!customerCrudUpdatedEmail || customerCrudUpdatedEmail.trim() === '') {",
+          "  const generatedUpdatedCustomerEmail = namespace ? `${namespace}.customer-updated-${now}@inbox.testmail.app` : `qa_customers_updated_${now}@example.com`;",
+          "  pm.environment.set('customer_crud_updated_email', generatedUpdatedCustomerEmail);",
+          "}",
+          "const pwd = pm.environment.get('user_password');",
+          "if (!pwd || pwd.trim() === '') { pm.environment.set('user_password', 'P0stmanPassw0rd!'); }"
+        ]
+      }
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "item": [
+        {
+          "name": "GET /health (200)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('body.status == ok', () => { const json = pm.response.json(); pm.expect(json).to.have.property('status', 'ok'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Auth",
+      "item": [
+        {
+          "name": "POST /auth/register (201)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('has user_id', () => { const json = pm.response.json(); pm.expect(json).to.have.property('user_id'); pm.expect(String(json.user_id)).to.not.equal(''); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/register duplicate (409)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('has detail', () => { const json = pm.response.json(); pm.expect(json).to.have.property('detail'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login-json (200) -> saves {{access_token}}",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/login-json", "host": ["{{base_url}}"], "path": ["auth", "login-json"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has access_token', () => pm.expect(json).to.have.property('access_token'));",
+                  "pm.environment.set('access_token', json.access_token);",
+                  "pm.test('token saved', () => pm.expect(pm.environment.get('access_token')).to.not.equal(''));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login-json invalid (401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"wrong-password-123\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/login-json", "host": ["{{base_url}}"], "path": ["auth", "login-json"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('status 401', () => pm.response.to.have.status(401));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "20 - Setup (Admin Data)",
+      "item": [
+        {
+          "name": "POST /catalog/services (201) -> saves {{catalog_service_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Oil change (QA)\",\n  \"price\": 99.9\n}" },
+            "url": { "raw": "{{base_url}}/catalog/services", "host": ["{{base_url}}"], "path": ["catalog", "services"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('has service_id', () => pm.expect(json).to.have.property('service_id'));",
+                  "pm.environment.set('catalog_service_id', json.service_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /catalog/parts (201) -> saves {{inventory_part_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Air filter (QA)\",\n  \"unit_price\": 49.9,\n  \"stock_quantity\": 2\n}" },
+            "url": { "raw": "{{base_url}}/catalog/parts", "host": ["{{base_url}}"], "path": ["catalog", "parts"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('has part_id', () => pm.expect(json).to.have.property('part_id'));",
+                  "pm.environment.set('inventory_part_id', json.part_id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "30 - Service Orders (Secure)",
+      "item": [
+        {
+          "name": "GET /service-orders (401) no token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 401', () => pm.response.to.have.status(401));"] } }]
+        },
+        {
+          "name": "GET /service-orders (401) invalid token",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{invalid_access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 401', () => pm.response.to.have.status(401));"] } }]
+        },
+        {
+          "name": "POST /service-orders (201) inline services + inline parts -> saves {{service_order_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Customer\",\n  \"customer_cpf_cnpj\": \"529.982.247-25\",\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999999\",\n  \"vehicle_brand\": \"FIAT\",\n  \"vehicle_model\": \"Uno\",\n  \"vehicle_year\": 2015,\n  \"vehicle_plate\": \"BRA1A23\",\n  \"services\": [\n    {\"description\": \"Inspection\", \"price\": 50.0}\n  ],\n  \"parts\": [\n    {\"name\": \"Bolt\", \"price\": 5.0, \"quantity\": 2}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
+                  "pm.environment.set('service_order_id', json.service_order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /service-orders (201) using catalog service_ids + inventory part_refs",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Customer 2\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999998\",\n  \"vehicle_brand\": \"VW\",\n  \"vehicle_model\": \"Gol\",\n  \"vehicle_year\": 2018,\n  \"vehicle_plate\": \"BRA1B23\",\n  \"service_ids\": [\"{{catalog_service_id}}\"],\n  \"part_refs\": [\n    {\"part_id\": \"{{inventory_part_id}}\", \"quantity\": 1}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has service_order_id', () => pm.expect(pm.response.json()).to.have.property('service_order_id'));"] } }]
+        },
+        {
+          "name": "POST /service-orders stock insufficient (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Stock\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999997\",\n  \"vehicle_brand\": \"GM\",\n  \"vehicle_model\": \"Corsa\",\n  \"vehicle_year\": 2012,\n  \"vehicle_plate\": \"BRA1C23\",\n  \"service_ids\": [\"{{catalog_service_id}}\"],\n  \"part_refs\": [\n    {\"part_id\": \"{{inventory_part_id}}\", \"quantity\": 999}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+        },
+        {
+          "name": "POST /service-orders missing services + service_ids (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Missing\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999996\",\n  \"vehicle_brand\": \"Ford\",\n  \"vehicle_model\": \"Ka\",\n  \"vehicle_year\": 2019,\n  \"vehicle_plate\": \"BRA1D23\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
+        },
+        {
+          "name": "POST /service-orders invalid plate (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Invalid Plate\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999995\",\n  \"vehicle_brand\": \"Ford\",\n  \"vehicle_model\": \"Focus\",\n  \"vehicle_year\": 2020,\n  \"vehicle_plate\": \"INVALID\",\n  \"services\": [\n    {\"description\": \"Inspection\", \"price\": 10.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
+        },
+        {
+          "name": "POST /service-orders invalid CPF/CNPJ (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Invalid CPF\",\n  \"customer_cpf_cnpj\": \"123.456.789-00\",\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999994\",\n  \"vehicle_brand\": \"Honda\",\n  \"vehicle_model\": \"Civic\",\n  \"vehicle_year\": 2017,\n  \"vehicle_plate\": \"BRA1E23\",\n  \"services\": [\n    {\"description\": \"Inspection\", \"price\": 10.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
+        },
+        {
+          "name": "GET /service-orders (200) + store {{customer_id}}/{{vehicle_id}} from created order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('is array', () => pm.expect(json).to.be.an('array'));",
+                  "const targetId = pm.environment.get('service_order_id');",
+                  "const target = json.find(o => String(o.id) === String(targetId));",
+                  "pm.test('created order present', () => pm.expect(target, 'order not found in list').to.be.ok);",
+                  "if (target) { pm.environment.set('customer_id_from_service_order', target.customer_id); pm.environment.set('vehicle_id_from_service_order', target.vehicle_id); }",
+                  "pm.test('stored customer_id_from_service_order', () => pm.expect(pm.environment.get('customer_id_from_service_order')).to.not.equal(''));",
+                  "pm.test('stored vehicle_id_from_service_order', () => pm.expect(pm.environment.get('vehicle_id_from_service_order')).to.not.equal(''));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /service-orders/{{service_order_id}}/status (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has status', () => pm.expect(pm.response.json()).to.have.property('status'));"] } }]
+        },
+        {
+          "name": "GET /service-orders/{{nonexistent_uuid}}/status (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/status", "host": ["{{base_url}}"], "path": ["service-orders", "00000000-0000-0000-0000-000000000000", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+        },
+        {
+          "name": "POST /service-orders/{{service_order_id}}/approval approved=true (200)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"approved\": true\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "approval"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+        },
+        {
+          "name": "POST /service-orders/{{service_order_id}}/approval approved=false (200)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"approved\": false\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "approval"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+        },
+        {
+          "name": "POST /service-orders/{{nonexistent_uuid}}/approval (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"approved\": true\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/approval", "host": ["{{base_url}}"], "path": ["service-orders", "00000000-0000-0000-0000-000000000000", "approval"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+        },
+        {
+          "name": "PATCH /service-orders/{{service_order_id}}/status (200) set IN_PROGRESS",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+        },
+        {
+          "name": "PATCH /service-orders/{{service_order_id}}/status invalid (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"NOT_A_STATUS\"\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+        },
+        {
+          "name": "PATCH /service-orders/{{nonexistent_uuid}}/status (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": { "raw": "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/status", "host": ["{{base_url}}"], "path": ["service-orders", "00000000-0000-0000-0000-000000000000", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "40 - Public",
+      "item": [
+        {
+          "name": "GET /public/service-orders/{{service_order_id}}/status (200)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/public/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["public", "service-orders", "{{service_order_id}}", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has status', () => pm.expect(pm.response.json()).to.have.property('status'));"] } }]
+        },
+        {
+          "name": "GET /public/service-orders/{{nonexistent_uuid}}/status (404)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/public/service-orders/00000000-0000-0000-0000-000000000000/status", "host": ["{{base_url}}"], "path": ["public", "service-orders", "00000000-0000-0000-0000-000000000000", "status"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "50 - Customers (Secure)",
+      "item": [
+        {
+          "name": "POST /customers (201) -> saves {{customer_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Customer QA\",\n  \"cpf_cnpj\": \"04.252.011/0001-10\",\n  \"email\": \"{{customer_crud_email}}\",\n  \"phone\": \"11911112222\"\n}" },
+            "url": { "raw": "{{base_url}}/customers", "host": ["{{base_url}}"], "path": ["customers"] }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["pm.variables.set('timestamp', String(Date.now()));"] } },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('customer_id_customers_crud', json.customer_id);",
+                  "pm.test('saved customer_id_customers_crud', () => pm.expect(pm.environment.get('customer_id_customers_crud')).to.not.equal(''));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /customers (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/customers", "host": ["{{base_url}}"], "path": ["customers"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /customers/{{customer_id_customers_crud}} (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/customers/{{customer_id_customers_crud}}", "host": ["{{base_url}}"], "path": ["customers", "{{customer_id_customers_crud}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /customers/{{nonexistent_uuid}} (404)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/customers/00000000-0000-0000-0000-000000000000", "host": ["{{base_url}}"], "path": ["customers", "00000000-0000-0000-0000-000000000000"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "PUT /customers/{{customer_id_customers_crud}} (200)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Customer QA Updated\",\n  \"cpf_cnpj\": \"04.252.011/0001-10\",\n  \"email\": \"{{customer_crud_updated_email}}\",\n  \"phone\": \"11911113333\"\n}" },
+            "url": { "raw": "{{base_url}}/customers/{{customer_id_customers_crud}}", "host": ["{{base_url}}"], "path": ["customers", "{{customer_id_customers_crud}}"] }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["pm.variables.set('timestamp', String(Date.now()));"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }
+          ]
+        },
+        {
+          "name": "DELETE /customers/{{customer_id_customers_crud}} (200) [disabled by default]",
+          "disabled": true,
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/customers/{{customer_id_customers_crud}}", "host": ["{{base_url}}"], "path": ["customers", "{{customer_id_customers_crud}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "60 - Vehicles (Secure)",
+      "item": [
+        {
+          "name": "POST /vehicles (201) -> saves {{vehicle_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla\",\n  \"year\": 2020,\n  \"plate\": \"BRA2A34\"\n}" },
+            "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('vehicle_id', json.vehicle_id);",
+                  "pm.test('saved vehicle_id', () => pm.expect(pm.environment.get('vehicle_id')).to.not.equal(''));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /vehicles invalid plate (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Yaris\",\n  \"year\": 2021,\n  \"plate\": \"INVALID\"\n}" },
+            "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
+        },
+        {
+          "name": "GET /vehicles (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /vehicles?customer_id={{customer_id}} (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/vehicles?customer_id={{customer_id_customers_crud}}", "host": ["{{base_url}}"], "path": ["vehicles"], "query": [{ "key": "customer_id", "value": "{{customer_id_customers_crud}}" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /vehicles/{{vehicle_id}} (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicle_id}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /vehicles/{{nonexistent_uuid}} (404)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/vehicles/00000000-0000-0000-0000-000000000000", "host": ["{{base_url}}"], "path": ["vehicles", "00000000-0000-0000-0000-000000000000"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "PUT /vehicles/{{vehicle_id}} (200)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla Altis\",\n  \"year\": 2021,\n  \"plate\": \"BRA2A34\"\n}" },
+            "url": { "raw": "{{base_url}}/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicle_id}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "DELETE /vehicles/{{vehicle_id}} (200)",
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicle_id}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "70 - Catalog (Secure)",
+      "item": [
+        {
+          "name": "GET /catalog/services (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/catalog/services", "host": ["{{base_url}}"], "path": ["catalog", "services"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "PUT /catalog/services/{{catalog_service_id}} (200)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Oil change (QA updated)\",\n  \"price\": 120.0\n}" },
+            "url": { "raw": "{{base_url}}/catalog/services/{{catalog_service_id}}", "host": ["{{base_url}}"], "path": ["catalog", "services", "{{catalog_service_id}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "DELETE /catalog/services/{{catalog_service_id}} (200)",
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/catalog/services/{{catalog_service_id}}", "host": ["{{base_url}}"], "path": ["catalog", "services", "{{catalog_service_id}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "GET /catalog/parts (200)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/catalog/parts", "host": ["{{base_url}}"], "path": ["catalog", "parts"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "PUT /catalog/parts/{{inventory_part_id}} (200)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Air filter (QA updated)\",\n  \"unit_price\": 60.0,\n  \"stock_quantity\": 5\n}" },
+            "url": { "raw": "{{base_url}}/catalog/parts/{{inventory_part_id}}", "host": ["{{base_url}}"], "path": ["catalog", "parts", "{{inventory_part_id}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "DELETE /catalog/parts/{{inventory_part_id}} (200)",
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{base_url}}/catalog/parts/{{inventory_part_id}}", "host": ["{{base_url}}"], "path": ["catalog", "parts", "{{inventory_part_id}}"] } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "80 - Metrics (Secure)",
+      "item": [
+        {
+          "name": "GET /metrics/average-execution-time (200; can be null)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/metrics/average-execution-time", "host": ["{{base_url}}"], "path": ["metrics", "average-execution-time"] } },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has average_execution_time_seconds', () => pm.expect(json).to.have.property('average_execution_time_seconds'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

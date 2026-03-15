@@ -34,6 +34,10 @@ class UpdateServiceOrderStatusUseCase:
         await self.service_order_repo.update_status(
             service_order_id, status_enum
         )
+        if status_enum == ServiceOrderStatus.IN_PROGRESS:
+            await self.service_order_repo.set_started_at(service_order_id)
+        if status_enum == ServiceOrderStatus.FINISHED:
+            await self.service_order_repo.set_finished_at(service_order_id)
 
         customer = await self.customer_repo.get_by_id(
             service_order.customer_id

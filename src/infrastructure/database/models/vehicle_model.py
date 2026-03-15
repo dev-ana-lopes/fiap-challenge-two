@@ -7,9 +7,7 @@ from sqlalchemy import (
     String,
     func,
 )
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from .base import Base
 
 
 class VehicleModel(Base):

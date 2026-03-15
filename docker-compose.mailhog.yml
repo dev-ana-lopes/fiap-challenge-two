@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: service-order-mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+    networks:
+      - service-order-network
+
+  api:
+    environment:
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_USERNAME: ""
+      SMTP_USE_TLS: "false"
+      SMTP_USE_AUTH: "false"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM_EMAIL: ""
+      SMTP_TIMEOUT: 10

@@ -15,5 +15,7 @@ class ServiceOrder:
     status: ServiceOrderStatus
     created_at: datetime
     updated_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     service_items: list[ServiceItem] = field(default_factory=list)
     part_items: list[PartItem] = field(default_factory=list)

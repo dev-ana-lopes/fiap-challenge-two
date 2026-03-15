@@ -6,6 +6,12 @@ from ...infrastructure.config.settings import Settings, get_settings
 from ...infrastructure.database.repositories.customer_repository import (
     PostgresCustomerRepository,
 )
+from ...infrastructure.database.repositories.catalog_service_repository import (
+    PostgresCatalogServiceRepository,
+)
+from ...infrastructure.database.repositories.inventory_part_repository import (
+    PostgresInventoryPartRepository,
+)
 from ...infrastructure.database.repositories.vehicle_repository import (
     PostgresVehicleRepository,
 )
@@ -47,6 +53,17 @@ async def get_customer_repository(
     session: AsyncSession = Depends(get_session),
 ) -> PostgresCustomerRepository:
     return PostgresCustomerRepository(session)
+
+async def get_catalog_service_repository(
+    session: AsyncSession = Depends(get_session),
+) -> PostgresCatalogServiceRepository:
+    return PostgresCatalogServiceRepository(session)
+
+
+async def get_inventory_part_repository(
+    session: AsyncSession = Depends(get_session),
+) -> PostgresInventoryPartRepository:
+    return PostgresInventoryPartRepository(session)
 
 
 async def get_vehicle_repository(

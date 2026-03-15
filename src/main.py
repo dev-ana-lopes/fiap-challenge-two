@@ -5,7 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .infrastructure.config.settings import get_settings
 from .infrastructure.database.session import DatabaseSession
-from .presentation.api.routes import auth_router, service_order_router
+from .presentation.api.routes import (
+    auth_router,
+    catalog_router,
+    customer_router,
+    metrics_router,
+    public_router,
+    service_order_router,
+    vehicle_router,
+)
 from .presentation.dependencies.db_dependencies import init_database
 
 
@@ -36,7 +44,12 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(public_router)
 app.include_router(service_order_router)
+app.include_router(customer_router)
+app.include_router(vehicle_router)
+app.include_router(catalog_router)
+app.include_router(metrics_router)
 
 
 @app.get("/health")

@@ -22,5 +22,17 @@ class ServiceOrderRepository(ABC):
         pass
 
     @abstractmethod
+    async def set_started_at(self, service_order_id: UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def set_finished_at(self, service_order_id: UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def get_average_execution_time_seconds(self) -> float | None:
+        pass
+
+    @abstractmethod
     async def list_active(self) -> list[ServiceOrder]:
         pass

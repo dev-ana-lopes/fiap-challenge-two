@@ -20,7 +20,9 @@ from ....application.use_cases.update_service_order_status_use_case import (
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
     get_customer_repository,
+    get_catalog_service_repository,
     get_email_sender,
+    get_inventory_part_repository,
     get_part_item_repository,
     get_service_item_repository,
     get_service_order_repository,
@@ -37,44 +39,73 @@ from ....presentation.schemas.service_order_schema import (
     UpdateServiceOrderStatusRequest
 )
 
-router = APIRouter(prefix="/service-orders", tags=["service-orders"])
+router = APIRouter(
+    prefix="/service-orders",
+    tags=["service-orders"],
+    dependencies=[Depends(get_current_user)],
+)
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
 CustomerRepo = Annotated[object, Depends(get_customer_repository)]
+CatalogServiceRepo = Annotated[object, Depends(get_catalog_service_repository)]
 VehicleRepo = Annotated[object, Depends(get_vehicle_repository)]
 ServiceOrderRepo = Annotated[object, Depends(get_service_order_repository)]
 ServiceItemRepo = Annotated[object, Depends(get_service_item_repository)]
 PartItemRepo = Annotated[object, Depends(get_part_item_repository)]
+InventoryPartRepo = Annotated[object, Depends(get_inventory_part_repository)]
 EmailSender = Annotated[object, Depends(get_email_sender)]
 
 
 @router.post("")
 async def create_service_order(
     request: CreateServiceOrderRequest,
-    current_user=CurrentUser,
-    customer_repo=CustomerRepo,
-    vehicle_repo=VehicleRepo,
-    service_order_repo=ServiceOrderRepo,
-    service_item_repo=ServiceItemRepo,
-    part_item_repo=PartItemRepo,
-    email_sender=EmailSender,
+    customer_repo: CustomerRepo,
+    vehicle_repo: VehicleRepo,
+    service_order_repo: ServiceOrderRepo,
+    service_item_repo: ServiceItemRepo,
+    part_item_repo: PartItemRepo,
+    catalog_service_repo: CatalogServiceRepo,
+    inventory_part_repo: InventoryPartRepo,
+    email_sender: EmailSender,
 ) -> CreateServiceOrderResponse:
+    if not request.service_ids and not request.services:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Either services or service_ids must be provided",
+        )
     dto = CreateServiceOrderDTO(
         customer_name=request.customer_name,
+        customer_cpf_cnpj=request.customer_cpf_cnpj,
         customer_email=request.customer_email,
         customer_phone=request.customer_phone,
         vehicle_brand=request.vehicle_brand,
         vehicle_model=request.vehicle_model,
         vehicle_year=request.vehicle_year,
         vehicle_plate=request.vehicle_plate,
-        services=[
-            {"description": s.description, "price": s.price}
-            for s in request.services
-        ],
-        parts=[
-            {"name": p.name, "price": p.price, "quantity": p.quantity}
-            for p in request.parts
-        ],
+        services=(
+            [
+                {"description": s.description, "price": s.price}
+                for s in (request.services or [])
+            ]
+            if request.services is not None
+            else None
+        ),
+        parts=(
+            [
+                {"name": p.name, "price": p.price, "quantity": p.quantity}
+                for p in (request.parts or [])
+            ]
+            if request.parts is not None
+            else None
+        ),
+        service_ids=request.service_ids,
+        part_refs=(
+            [
+                {"part_id": p.part_id, "quantity": p.quantity}
+                for p in (request.part_refs or [])
+            ]
+            if request.part_refs is not None
+            else None
+        ),
     )
 
     use_case = CreateServiceOrderUseCase(
@@ -83,18 +114,25 @@ async def create_service_order(
         service_order_repo,
         service_item_repo,
         part_item_repo,
+        catalog_service_repo,
+        inventory_part_repo,
         email_sender,
     )
 
-    service_order_id = await use_case.execute(dto)
+    try:
+        service_order_id = await use_case.execute(dto)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     return CreateServiceOrderResponse(service_order_id=service_order_id)
 
 
 @router.get("/{id}/status")
 async def get_service_order_status(
     id: UUID,
-    current_user=CurrentUser,
-    service_order_repo=ServiceOrderRepo,
+    service_order_repo: ServiceOrderRepo,
 ) -> ServiceOrderStatusResponse:
     use_case = GetServiceOrderStatusUseCase(service_order_repo)
     order_status = await use_case.execute(id)
@@ -112,10 +150,9 @@ async def get_service_order_status(
 async def approve_service_order(
     id: UUID,
     request: ApproveServiceOrderRequest,
-    current_user=CurrentUser,
-    customer_repo=CustomerRepo,
-    service_order_repo=ServiceOrderRepo,
-    email_sender=EmailSender,
+    customer_repo: CustomerRepo,
+    service_order_repo: ServiceOrderRepo,
+    email_sender: EmailSender,
 ) -> dict:
     use_case = ApproveServiceOrderUseCase(
         service_order_repo, customer_repo, email_sender
@@ -133,8 +170,7 @@ async def approve_service_order(
 
 @router.get("")
 async def list_service_orders(
-    current_user=CurrentUser,
-    service_order_repo=ServiceOrderRepo,
+    service_order_repo: ServiceOrderRepo,
 ) -> list[ServiceOrderResponse]:
     use_case = ListActiveServiceOrdersUseCase(service_order_repo)
     service_orders = await use_case.execute()
@@ -178,10 +214,9 @@ async def list_service_orders(
 async def update_service_order_status(
     id: UUID,
     request: UpdateServiceOrderStatusRequest,
-    current_user=CurrentUser,
-    customer_repo=CustomerRepo,
-    service_order_repo=ServiceOrderRepo,
-    email_sender=EmailSender,
+    customer_repo: CustomerRepo,
+    service_order_repo: ServiceOrderRepo,
+    email_sender: EmailSender,
 ) -> dict:
     use_case = UpdateServiceOrderStatusUseCase(
         service_order_repo, customer_repo, email_sender

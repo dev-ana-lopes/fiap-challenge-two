@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 
 from ....application.dto.login_dto import LoginDTO
 from ....application.use_cases.auth_use_case import (
@@ -42,6 +43,27 @@ async def register(
 
 @router.post("/login")
 async def login(
+    form_data: Annotated[OAuth2PasswordBearer, Depends()],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
+) -> LoginResponse:
+    dto = LoginDTO(email=form_data.username, password=form_data.password)
+
+    use_case = AuthenticateUserUseCase(user_repo, password_hasher, jwt_service)
+    token = await use_case.execute(dto)
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    return LoginResponse(access_token=token)
+
+
+@router.post("/login-json")
+async def login_json(
     request: LoginRequest,
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
     password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],

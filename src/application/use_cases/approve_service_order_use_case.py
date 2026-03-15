@@ -34,6 +34,7 @@ class ApproveServiceOrderUseCase:
             await self.service_order_repo.update_status(
                 service_order_id, ServiceOrderStatus.IN_PROGRESS
             )
+            await self.service_order_repo.set_started_at(service_order_id)
             await self.email_sender.send_status_changed(
                 customer_email,
                 str(service_order_id),
@@ -42,12 +43,12 @@ class ApproveServiceOrderUseCase:
             return True
 
         await self.service_order_repo.update_status(
-            service_order_id, ServiceOrderStatus.FINISHED
+            service_order_id, ServiceOrderStatus.CANCELLED
         )
         if customer is not None:
             await self.email_sender.send_status_changed(
                 customer_email,
                 str(service_order_id),
-                ServiceOrderStatus.FINISHED.value,
+                ServiceOrderStatus.CANCELLED.value,
             )
         return True
