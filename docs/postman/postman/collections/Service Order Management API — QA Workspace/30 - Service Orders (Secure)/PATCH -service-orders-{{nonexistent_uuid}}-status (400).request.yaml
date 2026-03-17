@@ -1,0 +1,21 @@
+$kind: http-request
+name: PATCH /service-orders/{{nonexistent_uuid}}/status (400)
+url: "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/status"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "status": "IN_PROGRESS"
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 400', () => pm.response.to.have.status(400));
+
+      pm.test('has detail', () =>
+      pm.expect(pm.response.json()).to.have.property('detail'));
+    language: text/javascript
+order: 17000

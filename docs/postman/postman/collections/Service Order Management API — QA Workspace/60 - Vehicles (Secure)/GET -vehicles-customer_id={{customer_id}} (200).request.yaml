@@ -1,0 +1,16 @@
+$kind: http-request
+name: GET /vehicles?customer_id={{customer_id}} (200)
+url: "{{base_url}}/vehicles?customer_id={{customer_id_customers_crud}}"
+method: GET
+queryParams:
+  customer_id: "{{customer_id_customers_crud}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      eval(pm.globals.get('qa_guard_required_uuid'));
+      qaGuardRequiredUuid('vehicle_id');
+    language: text/javascript
+  - type: afterResponse
+    code: pm.test('status 200', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 4000

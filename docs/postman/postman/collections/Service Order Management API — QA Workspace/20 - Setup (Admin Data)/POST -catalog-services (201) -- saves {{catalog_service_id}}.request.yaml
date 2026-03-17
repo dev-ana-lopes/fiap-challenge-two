@@ -1,0 +1,28 @@
+$kind: http-request
+name: POST /catalog/services (201) -> saves {{catalog_service_id}}
+url: "{{base_url}}/catalog/services"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "description": "Oil change (QA)",
+      "price": 99.9
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has service_id', () =>
+      pm.expect(json).to.have.property('service_id'));
+
+      pm.environment.set('catalog_service_id', json.service_id);
+    language: text/javascript
+order: 1000

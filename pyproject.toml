@@ -22,7 +22,7 @@ email-validator = "^2.1.0"
 python-multipart = "^0.0.6"
 asyncpg = "^0.31.0"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
 pytest-asyncio = "^0.21.1"
 pytest-cov = "^4.1.0"
@@ -47,6 +47,7 @@ line_length = 89
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
+    "e2e: end-to-end API and email workflow tests",
     "integration: tests that exercise external integrations",
     "testmail: live tests that query the Testmail API",
 ]

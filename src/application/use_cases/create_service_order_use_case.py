@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -19,11 +20,13 @@ from ...domain.repositories import (
     ServiceItemRepository,
     PartItemRepository,
 )
-from ...infrastructure.email.smtp_client import SmtpEmailSender
+from ...domain.services import ApprovalTokenService, EmailSender
+from .send_approval_request_email_use_case import SendApprovalRequestEmailUseCase
+
+logger = logging.getLogger(__name__)
 
 
 class CreateServiceOrderUseCase:
-
     def __init__(
         self,
         customer_repo: CustomerRepository,
@@ -33,7 +36,8 @@ class CreateServiceOrderUseCase:
         part_item_repo: PartItemRepository,
         catalog_service_repo: CatalogServiceRepository,
         inventory_part_repo: InventoryPartRepository,
-        email_sender: SmtpEmailSender,
+        email_sender: EmailSender,
+        approval_token_service: ApprovalTokenService,
     ):
         self.customer_repo = customer_repo
         self.vehicle_repo = vehicle_repo
@@ -42,15 +46,16 @@ class CreateServiceOrderUseCase:
         self.part_item_repo = part_item_repo
         self.catalog_service_repo = catalog_service_repo
         self.inventory_part_repo = inventory_part_repo
-        self.email_sender = email_sender
+        self.send_approval_request_email_use_case = SendApprovalRequestEmailUseCase(
+            email_sender,
+            approval_token_service,
+        )
 
     async def execute(self, dto: CreateServiceOrderDTO) -> str:
         now = datetime.utcnow()
         customer = None
         if dto.customer_cpf_cnpj:
-            customer = await self.customer_repo.get_by_cpf_cnpj(
-                dto.customer_cpf_cnpj
-            )
+            customer = await self.customer_repo.get_by_cpf_cnpj(dto.customer_cpf_cnpj)
         if customer is None:
             customer = await self.customer_repo.get_by_email(dto.customer_email)
 
@@ -163,10 +168,6 @@ class CreateServiceOrderUseCase:
                     )
                 )
 
-        total = sum(s.price for s in service_items) + sum(
-            p.price * p.quantity for p in part_items
-        )
-
         service_order = ServiceOrder(
             id=service_order_id,
             customer_id=customer.id,
@@ -180,8 +181,15 @@ class CreateServiceOrderUseCase:
 
         await self.service_order_repo.save(service_order)
 
-        await self.email_sender.send_approval_request(
-            customer.email, str(service_order_id), total=total
-        )
+        try:
+            await self.send_approval_request_email_use_case.execute(
+                customer.email,
+                service_order,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send approval request email for service order %s",
+                service_order_id,
+            )
 
         return str(service_order_id)

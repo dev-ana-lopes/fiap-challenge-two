@@ -1,0 +1,12 @@
+$kind: http-request
+name: GET /public/service-orders/{{nonexistent_uuid}}/status (404)
+url: "{{base_url}}/public/service-orders/00000000-0000-0000-0000-000000000000/s\
+  tatus"
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: pm.test('status 404', () => pm.response.to.have.status(404));
+    language: text/javascript
+order: 2000

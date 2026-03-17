@@ -1,0 +1,22 @@
+$kind: http-request
+name: GET /service-orders (200) + store {{customer_id}}/{{vehicle_id}} from
+  created order
+url: "{{base_url}}/service-orders"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      eval(pm.globals.get('qa_guard_required_uuid'));
+      qaGuardRequiredUuid('service_order_id');
+      pm.test('status 200', () => pm.response.to.have.status(200));
+      eval(pm.globals.get('qa_parse_json'));
+      const json = qaParseJson();
+      pm.test('is array', () => pm.expect(json).to.be.an('array'));
+      const targetId = pm.environment.get('service_order_id');
+      const target = json.find(o => String(o.id) === String(targetId));
+      pm.test('created order present', () => pm.expect(target, 'order not found in list').to.be.ok);
+      if (target) { pm.environment.set('customer_id_from_service_order', target.customer_id); pm.environment.set('vehicle_id_from_service_order', target.vehicle_id); }
+      pm.test('stored customer_id_from_service_order', () => pm.expect(pm.environment.get('customer_id_from_service_order')).to.not.equal(''));
+      pm.test('stored vehicle_id_from_service_order', () => pm.expect(pm.environment.get('vehicle_id_from_service_order')).to.not.equal(''));
+    language: text/javascript
+order: 9000

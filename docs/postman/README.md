@@ -1,64 +1,94 @@
-# Postman QA Workspace — Service Order Management API
+# Postman QA Workspace
 
-This folder contains a ready-to-import **Postman Collection** and **Environment** to test the API end-to-end, including negative cases (401/404/409/422/400).
+The collection covers the secure service-order endpoints and the public approval callback introduced for phase 2.
 
-## 1) Start the API with MailHog or your SMTP provider
-
-MailHog is a fake SMTP server used to prevent test failures on endpoints that send emails.
+## Recommended local setup
 
 ```bash
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.mailhog.yml up -d --build
+docker compose up -d --build
 ```
 
 Useful URLs:
-- API Swagger UI: `http://localhost:8000/docs`
-- Healthcheck: `http://localhost:8000/health`
-- MailHog UI (captures outgoing emails): `http://localhost:8025`
+- Swagger: `http://localhost:8000/docs`
+- MailHog: `http://localhost:8025`
 
-Notes:
-- `docker-compose.mailhog.yml` disables SMTP TLS/Auth for QA (`SMTP_USE_TLS=false`, `SMTP_USE_AUTH=false`).
-- In the current SMTP setup, login and sender are separate concerns:
-  - `SMTP_USERNAME` is used for SMTP authentication.
-  - `SMTP_FROM_EMAIL` controls the `From` header.
-  - `SMTP_USER` remains only as a legacy fallback for auth compatibility.
-  - `SMTP_TIMEOUT` is in seconds and applies to the SMTP connection.
-- With MailHog/Mailpit and `SMTP_USE_AUTH=false`, empty SMTP credentials are valid and the app can use `no-reply@localhost` as a local `From` fallback.
-- If you want Postman requests to generate inboxes on Testmail, set the Postman environment variable `testmail_namespace`. The collection will then generate emails like `namespace.tag@inbox.testmail.app` automatically.
+## Files
 
-## 2) Import into Postman
-
-Import both files:
 - `docs/postman/ServiceOrderAPI.postman_collection.json`
 - `docs/postman/ServiceOrderAPI.local.postman_environment.json`
+- `docs/postman/ServiceOrderAPI.email-approval.postman_collection.json`
+- `docs/postman/ServiceOrderAPI.email-approval.local.postman_environment.json`
 
-Select the environment **ServiceOrderAPI Local**.
+## Environment variables in Postman
 
-Optional environment variables for Testmail:
-- `testmail_namespace`: when set, generated `user_email`, `service_order_customer_email`, `customer_crud_email`, and `customer_crud_updated_email` use `@inbox.testmail.app`.
+- `base_url`
+- `access_token`
+- `service_order_id`
+- `service_order_id_manual_approve`
+- `service_order_id_manual_reject`
+- `service_order_id_status_update`
+- `service_order_id_public_approval`
+- `approval_email_token`
+- `approval_email_link`
+- `testmail_namespace`
+- `vehicle_customer_email`
+- `vehicle_customer_id`
 
-Suggested local `.env` for MailHog/Mailpit:
-```bash
-SMTP_HOST=localhost
-SMTP_PORT=1025
-SMTP_USERNAME=
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM_EMAIL=
-SMTP_USE_TLS=false
-SMTP_USE_AUTH=false
-SMTP_TIMEOUT=10
-```
+`approval_email_token` and `approval_email_link` are manual helper variables. Fill them from MailHog or Testmail when you want to call the public approval callback directly from Postman.
 
-## 3) Recommended execution order
+## Recommended execution order
 
-The collection is stateful (it saves IDs/tokens into variables). Run in order:
 1. `00 - Health`
 2. `10 - Auth`
 3. `20 - Setup (Admin Data)`
 4. `30 - Service Orders (Secure)`
-5. Other folders as needed (`40+`)
+5. Open MailHog/Testmail, copy the token for `service_order_id_public_approval`
+6. Set `approval_email_token`
+7. `40 - Public`
 
-Notes:
-- Secure folders use collection-level Bearer token: `{{access_token}}`.
-- Public endpoints disable auth explicitly.
+The collection is organized for sequential execution. Manual approve, manual reject, public approval, and status update now use different service-order ids so one scenario does not invalidate the next.
+
+## Email approval note
+
+The collection does not fetch the email automatically. The intended local flow is:
+
+1. Create the service order
+2. Open MailHog or Testmail
+3. Copy the approval link or token from the email
+4. Paste it into `approval_email_link` or `approval_email_token`
+5. Call the public approval request in folder `40 - Public`
+
+Local use:
+- MailHog is the normal source for the approval email in local runs
+- the request `GET /public/service-orders/{{service_order_id_public_approval}}/approval?token={{approval_email_token}}` will fail early with a clear message if the token was not filled
+
+Runner note:
+- the public callback remains manual by design
+- all other requests are structured to run in order in Postman Runner/Newman without reusing the same terminal service-order state
+
+## Vehicles folder note
+
+The folder `60 - Vehicles` is self-contained:
+- it creates its own support customer and stores the id in `vehicle_customer_id`
+- it uses `vehicle_customer_email` for that setup customer
+- it does not depend on `50 - Customers (Secure)` or on `customer_id_customers_crud`
+
+This allows the vehicles flow to run in isolation or as part of the full runner sequence without stale customer ids causing `POST /vehicles` to fail with `404`.
+
+## Focused email approval collection
+
+If you want only the manual email-approval scenario, use:
+- `docs/postman/ServiceOrderAPI.email-approval.postman_collection.json`
+- `docs/postman/ServiceOrderAPI.email-approval.local.postman_environment.json`
+
+Recommended order:
+1. `00 - Health`
+2. `10 - Auth`
+3. `20 - Email Approval -> POST /service-orders`
+4. Open MailHog or Testmail and copy the approval token
+5. Set `approval_email_token`
+6. Run the manual approval request
+7. Run the final public status check
+
+This focused collection avoids the rest of the QA suite and is intended only for the budget approval by email demo flow.

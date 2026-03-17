@@ -1,0 +1,36 @@
+$kind: http-request
+name: POST /service-orders/{{service_order_id}}/approval approved=true (200)
+url: "{{base_url}}/service-orders/{{service_order_id}}/approval"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "approved": true
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      eval(pm.globals.get('qa_guard_required_uuid'));
+      qaGuardRequiredUuid('service_order_id');
+    language: text/javascript
+  - type: afterResponse
+    code: >-
+      pm.test('status 200', () => pm.response.to.have.status(200));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('success true', () => pm.expect(json).to.have.property('success',
+      true));
+
+      pm.test('status IN_PROGRESS', () =>
+      pm.expect(json).to.have.property('status', 'IN_PROGRESS'));
+
+      pm.test('decision APPROVED', () =>
+      pm.expect(json).to.have.property('decision', 'APPROVED'));
+    language: text/javascript
+order: 12000

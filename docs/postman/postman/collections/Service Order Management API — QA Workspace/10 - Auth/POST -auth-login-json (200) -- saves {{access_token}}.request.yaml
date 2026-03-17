@@ -1,0 +1,33 @@
+$kind: http-request
+name: POST /auth/login-json (200) -> saves {{access_token}}
+url: "{{base_url}}/auth/login-json"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "{{user_email}}",
+      "password": "{{user_password}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 200', () => pm.response.to.have.status(200));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has access_token', () =>
+      pm.expect(json).to.have.property('access_token'));
+
+      pm.environment.set('access_token', json.access_token);
+
+      pm.test('token saved', () =>
+      pm.expect(pm.environment.get('access_token')).to.not.equal(''));
+    language: text/javascript
+order: 3000

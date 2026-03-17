@@ -1,42 +1,75 @@
 # Service Order Management API
 
-API for managing mechanic workshop Service Orders (OS).
+FastAPI application for the Tech Challenge service-order workflow. The project follows Clean Architecture and includes end-to-end budget approval and rejection by email with signed, expiring tokens.
 
-## Run locally (Docker Compose)
-Prerequisite: Docker + Docker Compose.
+## Phase 2 flow
+
+- Service orders notify the customer whenever they enter `WAITING_APPROVAL`.
+- Approval emails contain the service-order id, budget total, budget summary, and dedicated approve/reject links.
+- Manual approval remains available through `POST /service-orders/{id}/approval`.
+- Public approval by email is available through `GET /public/service-orders/{id}/approval?token=...`.
+
+## Run locally
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
+Useful URLs:
 - Swagger: `http://localhost:8000/docs`
 - Healthcheck: `http://localhost:8000/health`
+- MailHog UI: `http://localhost:8025`
 
-Migrations run automatically on container startup. Manual (if needed):
+## Docker note
+
+If `docker compose up -d --build` fails while pulling `mailhog/mailhog:v1.0.1`, the issue is Docker host connectivity to Docker Hub, not the API configuration.
+
+Recommended diagnostics:
+
 ```bash
-docker compose exec api poetry run alembic -c alembic/alembic.ini upgrade head
+docker compose config
+docker pull mailhog/mailhog:v1.0.1
 ```
 
+If the pull fails with DNS or network errors, use one of these options:
+- pre-pull the image on a machine with internet and transfer it with `docker save` / `docker load`
+- configure Docker to use an internal registry mirror that already has the MailHog image
+
+## Important environment variables
+
+- `APP_BASE_URL`: public base URL used inside approval links
+- `APPROVAL_TOKEN_SECRET`: signing secret for approval links
+- `APPROVAL_TOKEN_TTL_MINUTES`: link lifetime in minutes
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USE_TLS`, `SMTP_USE_AUTH`, `SMTP_FROM_EMAIL`: local SMTP delivery settings
+- `TESTMAIL_*`: live inbox polling settings for Testmail tests only
+
+If `APPROVAL_TOKEN_SECRET` is omitted, the app falls back to `JWT_SECRET`. Production should use a dedicated secret.
+
+`Testmail` is not used to send email in the application runtime. The runtime always delivers by SMTP; locally this SMTP target is MailHog. Testmail is only used by the optional live tests to inspect inbox contents through its API.
+
+## Tests
+
+Default suite:
+
+```bash
+poetry install
+poetry run pytest -m "not testmail"
+```
+
+Live Testmail suite:
+
+```bash
+poetry run pytest -m testmail
+```
+
+The live suite is skipped unless `TESTMAIL_ENABLED=true`, `TESTMAIL_API_KEY`, and `TESTMAIL_NAMESPACE` are configured.
+
 ## Documentation
-- Index: `docs/README.md`
-- Context/scope: `docs/PROJECT_CONTEXT.md`
-- How to run: `docs/RUNNING.md`
-- Architecture: `docs/ARCHITECTURE.md`
-- Postman: `docs/postman/service-order-api.postman_collection.json`
 
-## Testmail
-The application still sends email through the configured `SMTP_*` variables. For live email validation in tests, use Testmail as the destination inbox and configure:
-
-- `TESTMAIL_API_KEY` for the Testmail JSON API
-- `TESTMAIL_NAMESPACE` for your inbox namespace
-- `TESTMAIL_ENABLED=true` to enable live tests
-
-Use recipients in the format `namespace.tag@inbox.testmail.app`, where `tag` is unique per test run.
-
-SMTP notes:
-- `SMTP_USERNAME` is the SMTP login username.
-- `SMTP_FROM_EMAIL` is the `From` header used in the message.
-- `SMTP_USER` is legacy fallback for authentication compatibility.
-- `SMTP_TIMEOUT` is measured in seconds and applies to the SMTP connection.
-- When `SMTP_USE_AUTH=false`, the sender can fall back to `no-reply@localhost` for the `From` header in local environments such as MailHog/Mailpit.
+- `docs/README.md`
+- `docs/PROJECT_CONTEXT.md`
+- `docs/RUNNING.md`
+- `docs/ARCHITECTURE.md`
+- `docs/TECH_CHALLENGE.md`
+- `docs/postman/README.md`

@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...domain.services import ApprovalTokenService, EmailSender
 from ...infrastructure.database.session import DatabaseSession
 from ...infrastructure.config.settings import Settings, get_settings
 from ...infrastructure.database.repositories.customer_repository import (
@@ -27,6 +28,7 @@ from ...infrastructure.database.repositories.part_item_repository import (
 from ...infrastructure.database.repositories.user_repository import (
     PostgresUserRepository,
 )
+from ...infrastructure.email.approval_token_service import JwtApprovalTokenService
 from ...infrastructure.email.smtp_client import SmtpEmailSender
 from ...infrastructure.email.jwt_service import JwtService
 from ...infrastructure.email.password_hasher import PasswordHasher
@@ -53,6 +55,7 @@ async def get_customer_repository(
     session: AsyncSession = Depends(get_session),
 ) -> PostgresCustomerRepository:
     return PostgresCustomerRepository(session)
+
 
 async def get_catalog_service_repository(
     session: AsyncSession = Depends(get_session),
@@ -98,8 +101,14 @@ async def get_user_repository(
 
 def get_email_sender(
     settings: Settings = Depends(get_settings),
-) -> SmtpEmailSender:
+) -> EmailSender:
     return SmtpEmailSender(settings)
+
+
+def get_approval_token_service(
+    settings: Settings = Depends(get_settings),
+) -> ApprovalTokenService:
+    return JwtApprovalTokenService(settings)
 
 
 def get_jwt_service(

@@ -1,0 +1,24 @@
+$kind: http-request
+name: POST /auth/register duplicate (409)
+url: "{{base_url}}/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "{{user_email}}",
+      "password": "{{user_password}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 409', () => pm.response.to.have.status(409));
+
+      pm.test('has detail', () => { const json = pm.response.json();
+      pm.expect(json).to.have.property('detail'); });
+    language: text/javascript
+order: 2000

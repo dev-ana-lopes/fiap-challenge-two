@@ -1,0 +1,40 @@
+$kind: http-request
+name: POST /vehicles (201) -> saves {{vehicle_id}}
+url: "{{base_url}}/vehicles"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "customer_id": "{{customer_id_customers_crud}}",
+      "brand": "Toyota",
+      "model": "Corolla",
+      "year": 2020,
+      "plate": "BRA2A34"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      eval(pm.globals.get('qa_guard_required_uuid'));
+      qaGuardRequiredUuid('customer_id_customers_crud');
+    language: text/javascript
+  - type: afterResponse
+    code: >-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has vehicle_id', () => pm.expect(String(json.vehicle_id ||
+      '')).to.match(/^[0-9a-fA-F-]{36}$/));
+
+      pm.environment.set('vehicle_id', json.vehicle_id);
+
+      pm.test('saved vehicle_id', () =>
+      pm.expect(String(pm.environment.get('vehicle_id') ||
+      '')).to.match(/^[0-9a-fA-F-]{36}$/));
+    language: text/javascript
+order: 1000

@@ -1,0 +1,63 @@
+$kind: collection
+description: End-to-end + negative tests for Service Order Management API (FastAPI).
+scripts:
+  - type: http:beforeRequest
+    code: >-
+      // Collection-level defaults (idempotent): user_email + user_password
+
+      pm.globals.set('qa_guard_required_uuid', "function
+      qaGuardRequiredUuid(name) { const value = (pm.environment.get(name) ||
+      '').trim(); pm.test(name + ' is populated', function () {
+      pm.expect(value, name + ' must be set by a previous
+      request').to.match(/^[0-9a-fA-F-]{36}$/); }); return value; }");
+
+      pm.globals.set('qa_parse_json', `function qaParseJson() { try { return
+      pm.response.json(); } catch (error) { pm.test('response is valid JSON',
+      function () { throw new Error('Response body is not valid JSON: ' +
+      pm.response.text()); }); throw error; } }`);
+
+      const now = Date.now();
+
+      const namespace = (pm.environment.get('testmail_namespace') || '').trim();
+
+      const email = pm.environment.get('user_email');
+
+      if (!email || email.trim() === '') {
+        const generatedUserEmail = namespace ? `${namespace}.auth-${now}@inbox.testmail.app` : `qa_${now}@example.com`;
+        pm.environment.set('user_email', generatedUserEmail);
+      }
+
+      const orderCustomerEmail =
+      pm.environment.get('service_order_customer_email');
+
+      if (!orderCustomerEmail || orderCustomerEmail.trim() === '') {
+        const generatedOrderEmail = namespace ? `${namespace}.service-order-${now}@inbox.testmail.app` : `qa.customer.${now}@example.com`;
+        pm.environment.set('service_order_customer_email', generatedOrderEmail);
+      }
+
+      const customerCrudEmail = pm.environment.get('customer_crud_email');
+
+      if (!customerCrudEmail || customerCrudEmail.trim() === '') {
+        const generatedCustomerEmail = namespace ? `${namespace}.customer-${now}@inbox.testmail.app` : `qa_customers_${now}@example.com`;
+        pm.environment.set('customer_crud_email', generatedCustomerEmail);
+      }
+
+      const customerCrudUpdatedEmail =
+      pm.environment.get('customer_crud_updated_email');
+
+      if (!customerCrudUpdatedEmail || customerCrudUpdatedEmail.trim() === '') {
+        const generatedUpdatedCustomerEmail = namespace ? `${namespace}.customer-updated-${now}@inbox.testmail.app` : `qa_customers_updated_${now}@example.com`;
+        pm.environment.set('customer_crud_updated_email', generatedUpdatedCustomerEmail);
+      }
+
+      const pwd = pm.environment.get('user_password');
+
+      if (!pwd || pwd.trim() === '') { pm.environment.set('user_password',
+      'P0stmanPassw0rd!'); }
+    language: text/javascript
+auth:
+  - id: d315a923-30fc-46a8-afd2-cd3ace756ed2
+    type: bearer
+    name: bearer auth
+    credentials:
+      token: "{{access_token}}"

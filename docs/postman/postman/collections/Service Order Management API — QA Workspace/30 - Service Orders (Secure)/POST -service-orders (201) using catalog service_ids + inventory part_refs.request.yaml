@@ -1,0 +1,36 @@
+$kind: http-request
+name: POST /service-orders (201) using catalog service_ids + inventory part_refs
+url: "{{base_url}}/service-orders"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "customer_name": "QA Customer 2",
+      "customer_cpf_cnpj": null,
+      "customer_email": "{{service_order_customer_email}}",
+      "customer_phone": "11999999998",
+      "vehicle_brand": "VW",
+      "vehicle_model": "Gol",
+      "vehicle_year": 2018,
+      "vehicle_plate": "BRA1B23",
+      "service_ids": ["{{catalog_service_id}}"],
+      "part_refs": [
+        {"part_id": "{{inventory_part_id}}", "quantity": 1}
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 200', () => pm.response.to.have.status(200));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has service_order_id', () =>
+      pm.expect(json).to.have.property('service_order_id'));
+    language: text/javascript
+order: 4000

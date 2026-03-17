@@ -7,7 +7,6 @@ from ..config.settings import Settings
 
 
 class JwtService:
-
     def __init__(self, settings: Settings):
         self.settings = settings
 
@@ -37,9 +36,3 @@ class JwtService:
             return payload
         except JWTError:
             return None
-
-    def get_user_id_from_token(self, token: str) -> str | None:
-        payload = self.verify_token(token)
-        if payload is None:
-            return None
-        return payload.get("user_id")

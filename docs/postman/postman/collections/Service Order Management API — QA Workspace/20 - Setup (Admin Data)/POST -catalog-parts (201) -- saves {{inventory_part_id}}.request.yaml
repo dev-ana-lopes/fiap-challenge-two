@@ -1,0 +1,24 @@
+$kind: http-request
+name: POST /catalog/parts (201) -> saves {{inventory_part_id}}
+url: "{{base_url}}/catalog/parts"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Air filter (QA)",
+      "unit_price": 49.9,
+      "stock_quantity": 2
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+      eval(pm.globals.get('qa_parse_json'));
+      const json = qaParseJson();
+      pm.test('has part_id', () => pm.expect(json).to.have.property('part_id'));
+      pm.environment.set('inventory_part_id', json.part_id);
+    language: text/javascript
+order: 2000

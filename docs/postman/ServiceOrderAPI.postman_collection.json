@@ -12,6 +12,8 @@
         "type": "text/javascript",
         "exec": [
           "// Collection-level defaults (idempotent): user_email + user_password",
+          "pm.globals.set('qa_guard_required_uuid', \"function qaGuardRequiredUuid(name) { const value = (pm.environment.get(name) || '').trim(); pm.test(name + ' is populated', function () { pm.expect(value, name + ' must be set by a previous request').to.match(/^[0-9a-fA-F-]{36}$/); }); return value; }\");",
+          "pm.globals.set('qa_parse_json', `function qaParseJson() { try { return pm.response.json(); } catch (error) { pm.test('response is valid JSON', function () { throw new Error('Response body is not valid JSON: ' + pm.response.text()); }); throw error; } }`);",
           "const now = Date.now();",
           "const namespace = (pm.environment.get('testmail_namespace') || '').trim();",
           "const email = pm.environment.get('user_email');",
@@ -33,6 +35,11 @@
           "if (!customerCrudUpdatedEmail || customerCrudUpdatedEmail.trim() === '') {",
           "  const generatedUpdatedCustomerEmail = namespace ? `${namespace}.customer-updated-${now}@inbox.testmail.app` : `qa_customers_updated_${now}@example.com`;",
           "  pm.environment.set('customer_crud_updated_email', generatedUpdatedCustomerEmail);",
+          "}",
+          "const vehicleCustomerEmail = pm.environment.get('vehicle_customer_email');",
+          "if (!vehicleCustomerEmail || vehicleCustomerEmail.trim() === '') {",
+          "  const generatedVehicleCustomerEmail = namespace ? `${namespace}.vehicle-customer-${now}@inbox.testmail.app` : `qa_vehicle_customer_${now}@example.com`;",
+          "  pm.environment.set('vehicle_customer_email', generatedVehicleCustomerEmail);",
           "}",
           "const pwd = pm.environment.get('user_password');",
           "if (!pwd || pwd.trim() === '') { pm.environment.set('user_password', 'P0stmanPassw0rd!'); }"
@@ -134,7 +141,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
                   "pm.test('has access_token', () => pm.expect(json).to.have.property('access_token'));",
                   "pm.environment.set('access_token', json.access_token);",
                   "pm.test('token saved', () => pm.expect(pm.environment.get('access_token')).to.not.equal(''));"
@@ -179,7 +187,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
                   "pm.test('has service_id', () => pm.expect(json).to.have.property('service_id'));",
                   "pm.environment.set('catalog_service_id', json.service_id);"
                 ]
@@ -202,7 +211,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
                   "pm.test('has part_id', () => pm.expect(json).to.have.property('part_id'));",
                   "pm.environment.set('inventory_part_id', json.part_id);"
                 ]
@@ -236,7 +246,7 @@
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 401', () => pm.response.to.have.status(401));"] } }]
         },
         {
-          "name": "POST /service-orders (201) inline services + inline parts -> saves {{service_order_id}}",
+          "name": "POST /service-orders (200) inline services + inline parts -> saves {{service_order_id}}",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -253,7 +263,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
                   "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
                   "pm.environment.set('service_order_id', json.service_order_id);"
                 ]
@@ -262,7 +273,7 @@
           ]
         },
         {
-          "name": "POST /service-orders (201) using catalog service_ids + inventory part_refs",
+          "name": "POST /service-orders (200) using catalog service_ids + inventory part_refs",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -272,7 +283,7 @@
             },
             "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has service_order_id', () => pm.expect(pm.response.json()).to.have.property('service_order_id'));"] } }]
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));"] } }]
         },
         {
           "name": "POST /service-orders stock insufficient (400)",
@@ -339,8 +350,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "eval(pm.globals.get('qa_guard_required_uuid'));",
+                  "qaGuardRequiredUuid('service_order_id');",
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
                   "pm.test('is array', () => pm.expect(json).to.be.an('array'));",
                   "const targetId = pm.environment.get('service_order_id');",
                   "const target = json.find(o => String(o.id) === String(targetId));",
@@ -360,7 +374,7 @@
             "header": [],
             "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has status', () => pm.expect(pm.response.json()).to.have.property('status'));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('has status', () => pm.expect(json).to.have.property('status'));"] } }]
         },
         {
           "name": "GET /service-orders/{{nonexistent_uuid}}/status (404)",
@@ -372,24 +386,78 @@
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
         },
         {
-          "name": "POST /service-orders/{{service_order_id}}/approval approved=true (200)",
+          "name": "POST /service-orders (200) manual approve scenario -> saves {{service_order_id_manual_approve}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Manual Approve\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999993\",\n  \"vehicle_brand\": \"Toyota\",\n  \"vehicle_model\": \"Etios\",\n  \"vehicle_year\": 2016,\n  \"vehicle_plate\": \"BRA1F23\",\n  \"services\": [\n    {\"description\": \"Manual approval scenario\", \"price\": 80.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
+                  "pm.environment.set('service_order_id_manual_approve', json.service_order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /service-orders/{{service_order_id_manual_approve}}/approval approved=true (200)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"approved\": true\n}" },
-            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "approval"] }
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id_manual_approve}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id_manual_approve}}", "approval"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_manual_approve');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('success true', () => pm.expect(json).to.have.property('success', true));", "pm.test('status IN_PROGRESS', () => pm.expect(json).to.have.property('status', 'IN_PROGRESS'));", "pm.test('decision APPROVED', () => pm.expect(json).to.have.property('decision', 'APPROVED'));"] } }]
         },
         {
-          "name": "POST /service-orders/{{service_order_id}}/approval approved=false (200)",
+          "name": "POST /service-orders (200) manual reject scenario -> saves {{service_order_id_manual_reject}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Manual Reject\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999992\",\n  \"vehicle_brand\": \"Ford\",\n  \"vehicle_model\": \"Ka\",\n  \"vehicle_year\": 2017,\n  \"vehicle_plate\": \"BRA1G23\",\n  \"services\": [\n    {\"description\": \"Manual reject scenario\", \"price\": 90.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
+                  "pm.environment.set('service_order_id_manual_reject', json.service_order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /service-orders/{{service_order_id_manual_reject}}/approval approved=false (200)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"approved\": false\n}" },
-            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "approval"] }
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id_manual_reject}}/approval", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id_manual_reject}}", "approval"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_manual_reject');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('success true', () => pm.expect(json).to.have.property('success', true));", "pm.test('status CANCELLED', () => pm.expect(json).to.have.property('status', 'CANCELLED'));", "pm.test('decision REJECTED', () => pm.expect(json).to.have.property('decision', 'REJECTED'));"] } }]
         },
         {
           "name": "POST /service-orders/{{nonexistent_uuid}}/approval (404)",
@@ -402,34 +470,61 @@
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
         },
         {
-          "name": "PATCH /service-orders/{{service_order_id}}/status (200) set IN_PROGRESS",
+          "name": "POST /service-orders (200) status update scenario -> saves {{service_order_id_status_update}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Status Update\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999991\",\n  \"vehicle_brand\": \"Honda\",\n  \"vehicle_model\": \"Fit\",\n  \"vehicle_year\": 2018,\n  \"vehicle_plate\": \"BRA1H23\",\n  \"services\": [\n    {\"description\": \"Status update scenario\", \"price\": 120.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
+                  "pm.environment.set('service_order_id_status_update', json.service_order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /service-orders/{{service_order_id_status_update}}/status (200) set IN_PROGRESS",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
-            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id_status_update}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id_status_update}}", "status"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('success true', () => pm.expect(pm.response.json()).to.have.property('success', true));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_status_update');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('success true', () => pm.expect(json).to.have.property('success', true));"] } }]
         },
         {
-          "name": "PATCH /service-orders/{{service_order_id}}/status invalid (400)",
+          "name": "PATCH /service-orders/{{service_order_id_status_update}}/status invalid (400)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"status\": \"NOT_A_STATUS\"\n}" },
-            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id}}", "status"] }
+            "url": { "raw": "{{base_url}}/service-orders/{{service_order_id_status_update}}/status", "host": ["{{base_url}}"], "path": ["service-orders", "{{service_order_id_status_update}}", "status"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_status_update');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('has detail', () => pm.expect(json).to.have.property('detail'));"] } }]
         },
         {
-          "name": "PATCH /service-orders/{{nonexistent_uuid}}/status (400)",
+          "name": "PATCH /service-orders/{{nonexistent_uuid}}/status (404)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
             "url": { "raw": "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/status", "host": ["{{base_url}}"], "path": ["service-orders", "00000000-0000-0000-0000-000000000000", "status"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));", "pm.test('has detail', () => pm.expect(pm.response.json()).to.have.property('detail'));"] } }]
         }
       ]
     },
@@ -437,14 +532,42 @@
       "name": "40 - Public",
       "item": [
         {
-          "name": "GET /public/service-orders/{{service_order_id}}/status (200)",
+          "name": "POST /service-orders (200) public approval scenario -> saves {{service_order_id_public_approval}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"QA Public Approval\",\n  \"customer_cpf_cnpj\": null,\n  \"customer_email\": \"{{service_order_customer_email}}\",\n  \"customer_phone\": \"11999999990\",\n  \"vehicle_brand\": \"Chevrolet\",\n  \"vehicle_model\": \"Onix\",\n  \"vehicle_year\": 2019,\n  \"vehicle_plate\": \"BRA1J23\",\n  \"services\": [\n    {\"description\": \"Public approval scenario\", \"price\": 150.0}\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/service-orders", "host": ["{{base_url}}"], "path": ["service-orders"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has service_order_id', () => pm.expect(json).to.have.property('service_order_id'));",
+                  "pm.environment.set('service_order_id_public_approval', json.service_order_id);",
+                  "pm.test('approval_email_token must be provided manually before public approval call', () => pm.expect(true).to.equal(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /public/service-orders/{{service_order_id_public_approval}}/status (200)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/public/service-orders/{{service_order_id}}/status", "host": ["{{base_url}}"], "path": ["public", "service-orders", "{{service_order_id}}", "status"] }
+            "url": { "raw": "{{base_url}}/public/service-orders/{{service_order_id_public_approval}}/status", "host": ["{{base_url}}"], "path": ["public", "service-orders", "{{service_order_id_public_approval}}", "status"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.test('has status', () => pm.expect(pm.response.json()).to.have.property('status'));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_public_approval');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('has status', () => pm.expect(json).to.have.property('status'));"] } }]
         },
         {
           "name": "GET /public/service-orders/{{nonexistent_uuid}}/status (404)",
@@ -455,6 +578,36 @@
             "url": { "raw": "{{base_url}}/public/service-orders/00000000-0000-0000-0000-000000000000/status", "host": ["{{base_url}}"], "path": ["public", "service-orders", "00000000-0000-0000-0000-000000000000", "status"] }
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "GET /public/service-orders/{{service_order_id_public_approval}}/approval?token={{approval_email_token}} (200)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/service-orders/{{service_order_id_public_approval}}/approval?token={{approval_email_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["public", "service-orders", "{{service_order_id_public_approval}}", "approval"],
+              "query": [{ "key": "token", "value": "{{approval_email_token}}" }]
+            }
+          },
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_public_approval');", "const approvalToken = (pm.environment.get('approval_email_token') || '').trim();", "pm.test('approval_email_token is populated', function () { pm.expect(approvalToken, 'Copy the token from MailHog or Testmail before running this request').to.not.equal(''); });"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('success true', () => pm.expect(json).to.have.property('success', true));", "pm.test('has final status', () => pm.expect(json).to.have.property('status'));", "pm.test('has decision', () => pm.expect(json).to.have.property('decision'));"] } }]
+        },
+        {
+          "name": "GET /public/service-orders/{{service_order_id_public_approval}}/approval invalid token (400)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/service-orders/{{service_order_id_public_approval}}/approval?token=invalid-token",
+              "host": ["{{base_url}}"],
+              "path": ["public", "service-orders", "{{service_order_id_public_approval}}", "approval"],
+              "query": [{ "key": "token", "value": "invalid-token" }]
+            }
+          },
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('service_order_id_public_approval');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('has detail', () => pm.expect(json).to.have.property('detail'));"] } }]
         }
       ]
     },
@@ -477,9 +630,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has customer_id', () => pm.expect(String(json.customer_id || '')).to.match(/^[0-9a-fA-F-]{36}$/));",
                   "pm.environment.set('customer_id_customers_crud', json.customer_id);",
-                  "pm.test('saved customer_id_customers_crud', () => pm.expect(pm.environment.get('customer_id_customers_crud')).to.not.equal(''));"
+                  "pm.test('saved customer_id_customers_crud', () => pm.expect(String(pm.environment.get('customer_id_customers_crud') || '')).to.match(/^[0-9a-fA-F-]{36}$/));"
                 ]
               }
             }
@@ -488,7 +643,7 @@
         {
           "name": "GET /customers (200)",
           "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/customers", "host": ["{{base_url}}"], "path": ["customers"] } },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('customer_id_customers_crud');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
         },
         {
           "name": "GET /customers/{{customer_id_customers_crud}} (200)",
@@ -525,12 +680,12 @@
       "name": "60 - Vehicles (Secure)",
       "item": [
         {
-          "name": "POST /vehicles (201) -> saves {{vehicle_id}}",
+          "name": "POST /customers (201) vehicle setup -> saves {{vehicle_customer_id}}",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla\",\n  \"year\": 2020,\n  \"plate\": \"BRA2A34\"\n}" },
-            "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] }
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Vehicle Customer QA\",\n  \"cpf_cnpj\": \"11.222.333/0001-81\",\n  \"email\": \"{{vehicle_customer_email}}\",\n  \"phone\": \"11911114444\"\n}" },
+            "url": { "raw": "{{base_url}}/customers", "host": ["{{base_url}}"], "path": ["customers"] }
           },
           "event": [
             {
@@ -539,9 +694,46 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "const json = pm.response.json();",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has customer_id', () => pm.expect(String(json.customer_id || '')).to.match(/^[0-9a-fA-F-]{36}$/));",
+                  "pm.environment.set('vehicle_customer_id', json.customer_id);",
+                  "pm.test('saved vehicle_customer_id', () => pm.expect(String(pm.environment.get('vehicle_customer_id') || '')).to.match(/^[0-9a-fA-F-]{36}$/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /vehicles (201) -> saves {{vehicle_id}}",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{vehicle_customer_id}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla\",\n  \"year\": 2020,\n  \"plate\": \"BRA2A34\"\n}" },
+            "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.globals.get('qa_guard_required_uuid'));",
+                  "qaGuardRequiredUuid('vehicle_customer_id');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "eval(pm.globals.get('qa_parse_json'));",
+                  "const json = qaParseJson();",
+                  "pm.test('has vehicle_id', () => pm.expect(String(json.vehicle_id || '')).to.match(/^[0-9a-fA-F-]{36}$/));",
                   "pm.environment.set('vehicle_id', json.vehicle_id);",
-                  "pm.test('saved vehicle_id', () => pm.expect(pm.environment.get('vehicle_id')).to.not.equal(''));"
+                  "pm.test('saved vehicle_id', () => pm.expect(String(pm.environment.get('vehicle_id') || '')).to.match(/^[0-9a-fA-F-]{36}$/));"
                 ]
               }
             }
@@ -552,29 +744,29 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Yaris\",\n  \"year\": 2021,\n  \"plate\": \"INVALID\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{vehicle_customer_id}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Yaris\",\n  \"year\": 2021,\n  \"plate\": \"INVALID\"\n}" },
             "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('vehicle_customer_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"] } }]
         },
         {
           "name": "GET /vehicles (200)",
           "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/vehicles", "host": ["{{base_url}}"], "path": ["vehicles"] } },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('vehicle_customer_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
         },
         {
-          "name": "GET /vehicles?customer_id={{customer_id}} (200)",
+          "name": "GET /vehicles?customer_id={{vehicle_customer_id}} (200)",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/vehicles?customer_id={{customer_id_customers_crud}}", "host": ["{{base_url}}"], "path": ["vehicles"], "query": [{ "key": "customer_id", "value": "{{customer_id_customers_crud}}" }] }
+            "url": { "raw": "{{base_url}}/vehicles?customer_id={{vehicle_customer_id}}", "host": ["{{base_url}}"], "path": ["vehicles"], "query": [{ "key": "customer_id", "value": "{{vehicle_customer_id}}" }] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('vehicle_customer_id');", "qaGuardRequiredUuid('vehicle_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));", "eval(pm.globals.get('qa_parse_json'));", "const json = qaParseJson();", "pm.test('is array', () => pm.expect(json).to.be.an('array'));", "const vehicleId = pm.environment.get('vehicle_id');", "const target = json.find(v => String(v.id) === String(vehicleId));", "pm.test('created vehicle present', () => pm.expect(target, 'vehicle not found in filtered list').to.be.ok);"] } }]
         },
         {
           "name": "GET /vehicles/{{vehicle_id}} (200)",
           "request": { "method": "GET", "header": [], "url": { "raw": "{{base_url}}/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicle_id}}"] } },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('vehicle_id');", "qaGuardRequiredUuid('vehicle_customer_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
         },
         {
           "name": "GET /vehicles/{{nonexistent_uuid}} (404)",
@@ -586,10 +778,10 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id_customers_crud}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla Altis\",\n  \"year\": 2021,\n  \"plate\": \"BRA2A34\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{vehicle_customer_id}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla Altis\",\n  \"year\": 2021,\n  \"plate\": \"BRA2A34\"\n}" },
             "url": { "raw": "{{base_url}}/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["vehicles", "{{vehicle_id}}"] }
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["eval(pm.globals.get('qa_guard_required_uuid'));", "qaGuardRequiredUuid('vehicle_id');", "qaGuardRequiredUuid('vehicle_customer_id');"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"] } }]
         },
         {
           "name": "DELETE /vehicles/{{vehicle_id}} (200)",

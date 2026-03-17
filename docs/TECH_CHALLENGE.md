@@ -1,12 +1,26 @@
-# Tech Challenge (summary)
+# Tech Challenge Mapping
 
-This repository evolves the Phase 1 solution with a focus on quality, resilience, and scalability.
+## Scope covered in this repository
 
-Source (raw extraction): `docs/sources/tech_challenge_extracted.txt`.
+- Clean Architecture organization across `domain`, `application`, `infrastructure`, and `presentation`
+- JWT-protected operational endpoints
+- External budget approval and rejection through email
+- Status tracking and public status consultation
+- Dockerized execution with PostgreSQL and MailHog support
+- Automated unit, integration, end-to-end, and live Testmail scenarios
 
-## Requirements (high level)
-- Refactor applying Clean Code and Clean Architecture/Hexagonal Architecture.
-- Automated tests covering critical flows.
-- APIs: open service order, check status, approve/reject budget, list orders with ordering/rules, status updates via a tool (e.g., email).
-- Containerization: Dockerfile and `docker-compose`.
-- Additional Phase 2 deliverables (if applicable): Kubernetes (`/k8s`), Terraform (`/infra`), CI/CD.
+## Phase 2 deliverable highlights
+
+- Approval email sent whenever a service order enters `WAITING_APPROVAL`
+- Secure approve and reject links with signed tokens and expiration
+- Public callback endpoint for customer decision
+- Manual approval endpoint preserved for compatibility
+- Testmail polling helpers and live email-flow tests
+- Updated Postman collection and environment
+- MailHog-first local runtime, with Testmail restricted to live validation
+
+## Testing strategy
+
+- Unit: domain transitions, approval-token generation and validation, email composition
+- Integration: API routes with dependency overrides, manual approval, public callback, error cases
+- End-to-end: create order, send email, capture token or live email, apply approval link, assert final status

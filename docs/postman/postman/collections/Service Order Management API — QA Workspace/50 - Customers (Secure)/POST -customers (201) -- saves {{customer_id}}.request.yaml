@@ -1,0 +1,37 @@
+$kind: http-request
+name: POST /customers (201) -> saves {{customer_id}}
+url: "{{base_url}}/customers"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Customer QA",
+      "cpf_cnpj": "04.252.011/0001-10",
+      "email": "{{customer_crud_email}}",
+      "phone": "11911112222"
+    }
+scripts:
+  - type: beforeRequest
+    code: pm.variables.set('timestamp', String(Date.now()));
+    language: text/javascript
+  - type: afterResponse
+    code: >-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has customer_id', () => pm.expect(String(json.customer_id ||
+      '')).to.match(/^[0-9a-fA-F-]{36}$/));
+
+      pm.environment.set('customer_id_customers_crud', json.customer_id);
+
+      pm.test('saved customer_id_customers_crud', () =>
+      pm.expect(String(pm.environment.get('customer_id_customers_crud') ||
+      '')).to.match(/^[0-9a-fA-F-]{36}$/));
+    language: text/javascript
+order: 1000

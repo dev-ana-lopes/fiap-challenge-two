@@ -3,40 +3,49 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from uuid import UUID
 
+from ....domain.errors import (
+    ApprovalActionAlreadyProcessedError,
+    InvalidServiceOrderTransitionError,
+    ServiceOrderNotFoundError,
+)
 from ....application.dto.create_service_order_dto import CreateServiceOrderDTO
 from ....application.use_cases.approve_service_order_use_case import (
-    ApproveServiceOrderUseCase
+    ApproveServiceOrderUseCase,
 )
 from ....application.use_cases.create_service_order_use_case import (
-    CreateServiceOrderUseCase
+    CreateServiceOrderUseCase,
 )
 from ....application.use_cases.get_service_order_status_use_case import (
-    GetServiceOrderStatusUseCase
+    GetServiceOrderStatusUseCase,
 )
 from ....application.use_cases.list_active_service_orders_use_case import (
-    ListActiveServiceOrdersUseCase)
+    ListActiveServiceOrdersUseCase,
+)
 from ....application.use_cases.update_service_order_status_use_case import (
-    UpdateServiceOrderStatusUseCase)
+    UpdateServiceOrderStatusUseCase,
+)
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
-    get_customer_repository,
+    get_approval_token_service,
     get_catalog_service_repository,
+    get_customer_repository,
     get_email_sender,
     get_inventory_part_repository,
     get_part_item_repository,
     get_service_item_repository,
     get_service_order_repository,
-    get_vehicle_repository
+    get_vehicle_repository,
 )
 from ....presentation.schemas.service_order_schema import (
     ApproveServiceOrderRequest,
+    ApproveServiceOrderResponse,
     CreateServiceOrderRequest,
     CreateServiceOrderResponse,
     PartItemResponse,
     ServiceItemResponse,
     ServiceOrderResponse,
     ServiceOrderStatusResponse,
-    UpdateServiceOrderStatusRequest
+    UpdateServiceOrderStatusRequest,
 )
 
 router = APIRouter(
@@ -53,6 +62,7 @@ ServiceItemRepo = Annotated[object, Depends(get_service_item_repository)]
 PartItemRepo = Annotated[object, Depends(get_part_item_repository)]
 InventoryPartRepo = Annotated[object, Depends(get_inventory_part_repository)]
 EmailSender = Annotated[object, Depends(get_email_sender)]
+ApprovalTokenSvc = Annotated[object, Depends(get_approval_token_service)]
 
 
 @router.post("")
@@ -66,6 +76,7 @@ async def create_service_order(
     catalog_service_repo: CatalogServiceRepo,
     inventory_part_repo: InventoryPartRepo,
     email_sender: EmailSender,
+    approval_token_service: ApprovalTokenSvc,
 ) -> CreateServiceOrderResponse:
     if not request.service_ids and not request.services:
         raise HTTPException(
@@ -117,6 +128,7 @@ async def create_service_order(
         catalog_service_repo,
         inventory_part_repo,
         email_sender,
+        approval_token_service,
     )
 
     try:
@@ -153,19 +165,27 @@ async def approve_service_order(
     customer_repo: CustomerRepo,
     service_order_repo: ServiceOrderRepo,
     email_sender: EmailSender,
-) -> dict:
+) -> ApproveServiceOrderResponse:
     use_case = ApproveServiceOrderUseCase(
         service_order_repo, customer_repo, email_sender
     )
-    result = await use_case.execute(id, request.approved)
-
-    if not result:
+    try:
+        updated_status = await use_case.execute(id, request.approved)
+    except ServiceOrderNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Service order not found",
-        )
+        ) from exc
+    except ApprovalActionAlreadyProcessedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
-    return {"success": True}
+    return ApproveServiceOrderResponse(
+        status=updated_status.value,
+        decision="APPROVED" if request.approved else "REJECTED",
+    )
 
 
 @router.get("")
@@ -217,16 +237,30 @@ async def update_service_order_status(
     customer_repo: CustomerRepo,
     service_order_repo: ServiceOrderRepo,
     email_sender: EmailSender,
+    approval_token_service: ApprovalTokenSvc,
 ) -> dict:
     use_case = UpdateServiceOrderStatusUseCase(
-        service_order_repo, customer_repo, email_sender
+        service_order_repo,
+        customer_repo,
+        email_sender,
+        approval_token_service,
     )
-    result = await use_case.execute(id, request.status)
-
-    if not result:
+    try:
+        await use_case.execute(id, request.status)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to update service order status",
-        )
+            detail=str(exc),
+        ) from exc
+    except ServiceOrderNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service order not found",
+        ) from exc
+    except InvalidServiceOrderTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     return {"success": True}

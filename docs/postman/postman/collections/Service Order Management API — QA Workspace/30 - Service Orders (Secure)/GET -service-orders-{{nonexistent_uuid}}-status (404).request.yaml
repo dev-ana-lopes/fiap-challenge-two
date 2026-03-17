@@ -1,0 +1,13 @@
+$kind: http-request
+name: GET /service-orders/{{nonexistent_uuid}}/status (404)
+url: "{{base_url}}/service-orders/00000000-0000-0000-0000-000000000000/status"
+method: GET
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 404', () => pm.response.to.have.status(404));
+
+      pm.test('has detail', () =>
+      pm.expect(pm.response.json()).to.have.property('detail'));
+    language: text/javascript
+order: 11000

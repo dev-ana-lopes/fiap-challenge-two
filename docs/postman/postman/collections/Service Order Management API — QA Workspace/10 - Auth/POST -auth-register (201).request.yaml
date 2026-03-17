@@ -1,0 +1,25 @@
+$kind: http-request
+name: POST /auth/register (201)
+url: "{{base_url}}/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "{{user_email}}",
+      "password": "{{user_password}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+
+      pm.test('has user_id', () => { const json = pm.response.json();
+      pm.expect(json).to.have.property('user_id');
+      pm.expect(String(json.user_id)).to.not.equal(''); });
+    language: text/javascript
+order: 1000

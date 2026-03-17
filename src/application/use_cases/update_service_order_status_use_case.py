@@ -1,52 +1,57 @@
 from uuid import UUID
 
-from ...domain.repositories import CustomerRepository
-from ...domain.repositories import ServiceOrderRepository
 from ...domain.enums import ServiceOrderStatus
-from ...infrastructure.email.smtp_client import SmtpEmailSender
+from ...domain.errors import ServiceOrderNotFoundError
+from ...domain.repositories import CustomerRepository, ServiceOrderRepository
+from ...domain.services import ApprovalTokenService, EmailSender
+from .send_approval_request_email_use_case import SendApprovalRequestEmailUseCase
 
 
 class UpdateServiceOrderStatusUseCase:
-
     def __init__(
         self,
         service_order_repo: ServiceOrderRepository,
         customer_repo: CustomerRepository,
-        email_sender: SmtpEmailSender,
+        email_sender: EmailSender,
+        approval_token_service: ApprovalTokenService,
     ):
         self.service_order_repo = service_order_repo
         self.customer_repo = customer_repo
         self.email_sender = email_sender
+        self.send_approval_request_email_use_case = SendApprovalRequestEmailUseCase(
+            email_sender,
+            approval_token_service,
+        )
 
-    async def execute(self, service_order_id: UUID, status: str) -> bool:
+    async def execute(self, service_order_id: UUID, status: str) -> ServiceOrderStatus:
         try:
             status_enum = ServiceOrderStatus(status)
-        except ValueError:
-            return False
+        except ValueError as exc:
+            raise ValueError("Invalid service order status") from exc
 
-        service_order = await self.service_order_repo.get_by_id(
-            service_order_id
-        )
+        service_order = await self.service_order_repo.get_by_id(service_order_id)
 
         if service_order is None:
-            return False
+            raise ServiceOrderNotFoundError(service_order_id)
 
-        await self.service_order_repo.update_status(
-            service_order_id, status_enum
-        )
+        service_order.transition_to(status_enum)
+        await self.service_order_repo.update_status(service_order_id, status_enum)
         if status_enum == ServiceOrderStatus.IN_PROGRESS:
             await self.service_order_repo.set_started_at(service_order_id)
         if status_enum == ServiceOrderStatus.FINISHED:
             await self.service_order_repo.set_finished_at(service_order_id)
 
-        customer = await self.customer_repo.get_by_id(
-            service_order.customer_id
-        )
-        if customer is not None:
+        customer = await self.customer_repo.get_by_id(service_order.customer_id)
+        if customer is not None and status_enum == ServiceOrderStatus.WAITING_APPROVAL:
+            await self.send_approval_request_email_use_case.execute(
+                customer.email,
+                service_order,
+            )
+        elif customer is not None:
             await self.email_sender.send_status_changed(
                 customer.email,
                 str(service_order_id),
                 status_enum.value,
             )
 
-        return True
+        return status_enum

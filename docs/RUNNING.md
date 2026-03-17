@@ -1,53 +1,91 @@
-# How to run (Docker Compose)
+# Running The API
 
 ## Prerequisites
-- Docker + Docker Compose
 
-## Start the environment
+- Docker and Docker Compose
+- Python 3.12 plus Poetry if you want to run tests outside containers
+
+## Start with Docker Compose
+
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
-## Start with MailHog (fake SMTP) for QA
-Some endpoints send emails via SMTP. For local QA/testing, you can use MailHog to avoid SMTP failures:
-```bash
-cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.mailhog.yml up -d --build
-```
-
-MailHog UI: `http://localhost:8025`
-
-This Compose override also disables SMTP TLS/Auth for QA (`SMTP_USE_TLS=false`, `SMTP_USE_AUTH=false`).
-
-## Access
-- Swagger (OpenAPI UI): `http://localhost:8000/docs`
+Useful URLs:
+- Swagger: `http://localhost:8000/docs`
 - Healthcheck: `http://localhost:8000/health`
 
-## Migrations
-Migrations run automatically when the container starts (`MIGRATE_ON_STARTUP=true`).
+Recommended diagnostics before or after startup:
 
-Run manually (if needed):
+```bash
+docker compose config
+docker pull mailhog/mailhog:v1.0.1
+```
+
+If `docker pull` fails with DNS or network errors, the host cannot reach Docker Hub. In that case:
+- load a previously exported image with `docker load`
+- or point Docker to an internal registry mirror that already contains the MailHog image
+
+Migrations run on container startup. Manual execution remains available:
+
 ```bash
 docker compose exec api poetry run alembic -c alembic/alembic.ini upgrade head
 ```
 
-## Logs and quick troubleshooting
+## Local email delivery
+
+MailHog is bundled in the default local stack and is the standard SMTP target for demos and QA.
+
+MailHog UI: `http://localhost:8025`
+
+Recommended variables for MailHog:
+
 ```bash
-docker compose ps
-docker compose logs -f api
-docker compose logs -f postgres
+APP_BASE_URL=http://localhost:8000
+SMTP_HOST=mailhog
+SMTP_PORT=1025
+SMTP_FROM_EMAIL=
+SMTP_USE_TLS=false
+SMTP_USE_AUTH=false
+APPROVAL_TOKEN_SECRET=change-me
+APPROVAL_TOKEN_TTL_MINUTES=60
 ```
 
-## Run tests
-Outside Docker (requires local Python/Poetry):
+## Approval flow configuration
+
+Required variables:
+- `APP_BASE_URL`: base used in approve/reject links
+- `APPROVAL_TOKEN_SECRET`: secret used to sign approval tokens
+- `APPROVAL_TOKEN_TTL_MINUTES`: token lifetime
+
+Optional behavior:
+- If `APPROVAL_TOKEN_SECRET` is empty, the app falls back to `JWT_SECRET`
+- `APP_BASE_URL` should match the externally reachable API URL in QA or production
+
+## Running tests
+
+Install dependencies locally:
+
 ```bash
 poetry install
-poetry run pytest
 ```
 
-## Run live Testmail tests
-The default test suite does not depend on Testmail. To enable live email assertions, configure these variables in `.env`:
+Run the default suite:
+
+```bash
+poetry run pytest -m "not testmail"
+```
+
+Run only the API and email end-to-end suite:
+
+```bash
+poetry run pytest -m e2e
+```
+
+## Live Testmail flow
+
+The default suite does not require Testmail. To validate delivery plus approval-link extraction against a real inbox API, configure:
 
 ```bash
 TESTMAIL_API_KEY=your-api-key
@@ -56,16 +94,14 @@ TESTMAIL_ENABLED=true
 TESTMAIL_API_BASE_URL=https://api.testmail.app/api/json
 ```
 
-Keep the SMTP configuration pointing to your actual SMTP provider. Then send emails to recipients in the format `namespace.tag@inbox.testmail.app`.
+Recipients must use the format `namespace.tag@inbox.testmail.app`.
 
-SMTP configuration notes:
-- `SMTP_USERNAME` is the username used for SMTP login.
-- `SMTP_FROM_EMAIL` controls the `From` header independently from login.
-- `SMTP_USER` remains available as a legacy fallback for authentication.
-- `SMTP_TIMEOUT` is in seconds and applies to the SMTP connection timeout.
-- With `SMTP_USE_AUTH=false`, local tools such as MailHog/Mailpit can run with empty credentials and the app will use a local fallback sender header.
+Run live tests:
 
-Run only the live tests with:
 ```bash
 poetry run pytest -m testmail
 ```
+
+The live tests poll Testmail until the email arrives, extract the approval link, call the public callback endpoint, and assert the final service-order status.
+
+Important: Testmail is used only by the tests. The application runtime still delivers email through SMTP.

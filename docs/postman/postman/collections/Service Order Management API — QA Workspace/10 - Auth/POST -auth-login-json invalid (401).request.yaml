@@ -1,0 +1,24 @@
+$kind: http-request
+name: POST /auth/login-json invalid (401)
+url: "{{base_url}}/auth/login-json"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "{{user_email}}",
+      "password": "wrong-password-123"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 401', () => pm.response.to.have.status(401));
+
+      pm.test('has detail', () =>
+      pm.expect(pm.response.json()).to.have.property('detail'));
+    language: text/javascript
+order: 4000

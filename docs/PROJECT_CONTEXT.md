@@ -1,41 +1,46 @@
-# Project context — Service Order Management API
+# Project Context
 
 ## Overview
-Backend API for managing mechanic workshop **Service Orders (OS)**: intake, service/parts items, status tracking, and customer communication.
 
-## Problem statement
-Managing service orders via spreadsheets/WhatsApp typically leads to:
-- poor status traceability (Received → Diagnosis → Waiting approval → In progress → Finished → Delivered);
-- inconsistent approval workflow;
-- fragmented history by customer/vehicle;
-- little to no automated communication.
+This repository implements the backend for a mechanic workshop service-order system. The phase-2 scope adds external budget approval through email without breaking the existing authenticated approval endpoint.
 
-## Objectives
-- Centralize service order creation and tracking.
-- Enforce controlled status transitions.
-- Register services and parts linked to each order.
-- Notify customers by email on workflow events.
-- Protect endpoints with JWT authentication.
+## Main business goals
 
-## Scope
-In scope:
-- authentication via `POST /auth/login` (JWT);
-- service orders: create, list active, check status, approve/reject, update status.
+- Centralize service-order creation, tracking, and customer communication
+- Enforce explicit status transitions inside the domain layer
+- Allow a customer to approve or reject a budget from an email link
+- Keep the API testable, containerized, and demonstrable for the Tech Challenge
 
-Out of scope (for now):
-- UI/Frontend, payments/billing, full user management (roles/permissions), inventory/suppliers.
+## Current status model
+
+The workflow is explicitly modeled as:
+
+`RECEIVED -> DIAGNOSIS -> WAITING_APPROVAL -> IN_PROGRESS -> FINISHED -> DELIVERED`
+
+Cancellation is allowed from the active stages covered by the domain rules. Rejection of a budget moves the order from `WAITING_APPROVAL` to `CANCELLED`.
+
+## Approval channels
+
+The project now supports two approval paths:
+
+- Authenticated manual decision: `POST /service-orders/{id}/approval`
+- Public email callback: `GET /public/service-orders/{id}/approval?token=...`
+
+Both paths reuse the same application logic and the same domain transition rule.
 
 ## Main endpoints
-- `GET /health` — healthcheck
-- `POST /auth/login` — authenticate and issue JWT
-- `POST /service-orders` — open a new service order
-- `GET /service-orders` — list active service orders
-- `GET /service-orders/{id}/status` — get order status
-- `POST /service-orders/{id}/approval` — register approval/rejection
-- `PATCH /service-orders/{id}/status` — update order status
 
-## Technology
-Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL, Pydantic, JWT, SMTP, Docker Compose.
+- `POST /service-orders`
+- `GET /service-orders`
+- `GET /service-orders/{id}/status`
+- `POST /service-orders/{id}/approval`
+- `PATCH /service-orders/{id}/status`
+- `GET /public/service-orders/{id}/status`
+- `GET /public/service-orders/{id}/approval?token=...`
 
-## How to run
-See `docs/RUNNING.md`.
+## Out of scope
+
+- Frontend or customer portal
+- Payment capture
+- Supplier and full inventory operations
+- Fine-grained authorization and user roles

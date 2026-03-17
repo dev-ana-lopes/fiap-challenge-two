@@ -1,0 +1,41 @@
+$kind: http-request
+name: POST /service-orders (201) inline services + inline parts -> saves
+  {{service_order_id}}
+url: "{{base_url}}/service-orders"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "customer_name": "QA Customer",
+      "customer_cpf_cnpj": "529.982.247-25",
+      "customer_email": "{{service_order_customer_email}}",
+      "customer_phone": "11999999999",
+      "vehicle_brand": "FIAT",
+      "vehicle_model": "Uno",
+      "vehicle_year": 2015,
+      "vehicle_plate": "BRA1A23",
+      "services": [
+        {"description": "Inspection", "price": 50.0}
+      ],
+      "parts": [
+        {"name": "Bolt", "price": 5.0, "quantity": 2}
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 200', () => pm.response.to.have.status(200));
+
+      eval(pm.globals.get('qa_parse_json'));
+
+      const json = qaParseJson();
+
+      pm.test('has service_order_id', () =>
+      pm.expect(json).to.have.property('service_order_id'));
+
+      pm.environment.set('service_order_id', json.service_order_id);
+    language: text/javascript
+order: 3000

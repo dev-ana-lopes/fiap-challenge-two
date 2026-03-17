@@ -1,0 +1,32 @@
+$kind: http-request
+name: POST /service-orders stock insufficient (400)
+url: "{{base_url}}/service-orders"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "customer_name": "QA Stock",
+      "customer_cpf_cnpj": null,
+      "customer_email": "{{service_order_customer_email}}",
+      "customer_phone": "11999999997",
+      "vehicle_brand": "GM",
+      "vehicle_model": "Corsa",
+      "vehicle_year": 2012,
+      "vehicle_plate": "BRA1C23",
+      "service_ids": ["{{catalog_service_id}}"],
+      "part_refs": [
+        {"part_id": "{{inventory_part_id}}", "quantity": 999}
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      pm.test('status 400', () => pm.response.to.have.status(400));
+
+      pm.test('has detail', () =>
+      pm.expect(pm.response.json()).to.have.property('detail'));
+    language: text/javascript
+order: 5000

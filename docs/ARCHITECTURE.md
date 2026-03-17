@@ -1,177 +1,88 @@
 # Architecture
 
-This document describes the system architecture, key flows, technology stack, and the rationale behind major technical choices for the Tech Challenge goals (quality, resilience, scalability).
+## Architectural style
 
-## Goals & constraints (Tech Challenge)
-- Maintainable codebase (Clean Architecture / Clean Code).
-- Production-ready runtime (containerized, predictable startup, health checks).
-- Resilience and scalability readiness (stateless API, clear boundaries, infra-friendly design).
-- Automated tests for critical flows.
+The codebase follows Clean Architecture:
 
-## Technology stack
-### Runtime & API
-- **Python 3.12**
-- **FastAPI** (ASGI) + **Uvicorn**
-- **Pydantic** for request/response validation and settings
+- `src/domain`: entities, enums, errors, repository contracts, email and token ports
+- `src/application`: use cases that orchestrate service-order flows
+- `src/infrastructure`: PostgreSQL repositories, SMTP sender, JWT services, settings
+- `src/presentation`: FastAPI routes, request and response schemas, dependency wiring
 
-### Persistence
-- **PostgreSQL** (transactional relational store)
-- **SQLAlchemy 2.x** (async) as ORM
-- **Alembic** for schema migrations
+Routes do not contain business rules. They translate HTTP requests into use-case calls and map domain or application errors to HTTP responses.
 
-### Security
-- **JWT** (via `python-jose`) for authentication
-- **bcrypt** hashing (via `passlib`)
+## Approval by email design
 
-### Messaging / notifications
-- **SMTP** (async client) for email notifications
+### Ports introduced or reinforced
 
-### Tooling & operations
-- **Docker** + **Docker Compose** for local/prod parity
-- **Poetry** for dependency management (also used inside the container image)
-- **Pytest** for automated testing
+- `EmailSender`: notification contract used by create, status-update, and approval flows
+- `ApprovalTokenService`: token generation and validation contract for public approval links
 
-## Architecture style
-The project follows **Clean Architecture**: business rules in the center, frameworks and delivery mechanisms at the edges.
+### Infrastructure implementations
 
-### Layers (code organization)
-- `src/domain`: entities, value objects, enums, and contracts (repository/service interfaces).
-- `src/application`: use cases (business workflows) and DTOs.
-- `src/infrastructure`: implementations for persistence and external providers (DB, JWT, SMTP), plus settings.
-- `src/presentation`: FastAPI routes, HTTP schemas, dependency wiring.
+- `SmtpEmailSender`: builds the approval email template and public approve or reject URLs using `APP_BASE_URL`
+- `JwtApprovalTokenService`: signs approval tokens with expiration using `APPROVAL_TOKEN_SECRET`
 
-### Dependency rule
-Dependencies point inward:
-- `presentation` → `application` → `domain`
-- `infrastructure` implements interfaces defined by `domain` / `application`
+For local development, the SMTP provider is MailHog. Testmail is not part of runtime delivery; it is only used by the optional live suite to poll inbox contents by API.
 
-## System context
-```mermaid
-flowchart LR
-  Client[User / Client App] -->|HTTPS| API[Service Order Management API]
-  API -->|SQL| DB[(PostgreSQL)]
-  API -->|SMTP| Mail[SMTP Server]
-```
+### Shared approval workflow
 
-## Container view (Docker Compose)
-```mermaid
-flowchart LR
-  subgraph Compose[Docker Compose Network]
-    API[api: FastAPI/Uvicorn\ncontainer: service-order-api] --> DB[(postgres:16\ncontainer: service-order-postgres)]
-  end
-  API -->|SMTP egress| Mail[SMTP Provider]
-  Browser[Browser / Postman] -->|localhost:8000| API
-```
+1. A service order reaches `WAITING_APPROVAL`
+2. `SendApprovalRequestEmailUseCase` generates an approve token and a reject token
+3. The SMTP adapter composes an email with:
+   - service-order id
+   - budget total
+   - budget summary
+   - approve link
+   - reject link
+4. The public callback validates the token and delegates to the same decision use case used by manual approval
 
-Operational notes:
-- The API is **stateless** (session state is not stored in memory), enabling horizontal scaling.
-- Database is the system of record; schema is managed via Alembic.
-- Health checks are exposed via `/health` (and container health check can probe the API).
+## Security decisions
 
-## Main flows
+- Approval links use signed tokens instead of predictable query parameters
+- Tokens include the service-order id, decision, purpose, and expiration
+- The public callback checks:
+  - invalid signature or malformed payload
+  - expired token
+  - token and service-order mismatch
+  - already processed approval decision
 
-### 1) Authentication (JWT login)
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Client
-  participant API as FastAPI
-  participant UC as Login Use Case
-  participant DB as PostgreSQL
+## Status rules
 
-  C->>API: POST /auth/login (username/password)
-  API->>UC: execute(credentials)
-  UC->>DB: fetch user + verify password hash
-  DB-->>UC: user record
-  UC-->>API: access_token (JWT)
-  API-->>C: 200 {access_token, token_type}
-```
+The domain entity `ServiceOrder` owns the transition map. Relevant transitions for the phase-2 flow:
 
-Why JWT:
-- Works well with **stateless** APIs and reverse proxies/load balancers.
-- Keeps authorization simple for REST clients (Postman/Swagger).
+- `RECEIVED -> DIAGNOSIS | WAITING_APPROVAL | CANCELLED`
+- `DIAGNOSIS -> WAITING_APPROVAL | IN_PROGRESS | CANCELLED`
+- `WAITING_APPROVAL -> IN_PROGRESS | CANCELLED`
+- `IN_PROGRESS -> FINISHED | CANCELLED`
+- `FINISHED -> DELIVERED`
 
-### 2) Open a service order (create OS)
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Client
-  participant API as FastAPI
-  participant UC as CreateServiceOrder Use Case
-  participant Repo as Repository (interface)
-  participant DB as PostgreSQL
+Budget rejection is explicitly documented as `WAITING_APPROVAL -> CANCELLED`.
 
-  C->>API: POST /service-orders (payload) + Bearer JWT
-  API->>UC: execute(dto)
-  UC->>Repo: create(serviceOrder)
-  Repo->>DB: INSERT ... (order, customer, vehicle, items)
-  DB-->>Repo: ids
-  Repo-->>UC: created aggregate
-  UC-->>API: response DTO (order_id)
-  API-->>C: 201 {id, ...}
-```
+## Main runtime flows
 
-Key rule: the use case orchestrates the workflow; persistence details stay in `infrastructure`.
+### Create service order
 
-### 3) Approve/reject budget (external approval)
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Client
-  participant API as FastAPI
-  participant UC as ApproveBudget Use Case
-  participant DB as PostgreSQL
-  participant SMTP as SMTP Provider
+`POST /service-orders` creates the aggregate in `WAITING_APPROVAL`, persists items, and tries to send the approval email. Email-delivery failure is logged but does not roll back order creation.
 
-  C->>API: POST /service-orders/{id}/approval (approve=true/false)
-  API->>UC: execute(order_id, decision)
-  UC->>DB: UPDATE status + persist decision
-  UC->>SMTP: send notification email (optional)
-  API-->>C: 200 {status}
-```
+### Manual approval
 
-### 4) Status update with notification
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Client
-  participant API as FastAPI
-  participant UC as UpdateStatus Use Case
-  participant DB as PostgreSQL
-  participant SMTP as SMTP Provider
+`POST /service-orders/{id}/approval` is authenticated and accepts a payload with `approved: true|false`.
 
-  C->>API: PATCH /service-orders/{id}/status (new_status)
-  API->>UC: execute(order_id, new_status)
-  UC->>DB: UPDATE status
-  UC->>SMTP: send status update email
-  API-->>C: 200 {status}
-```
+### Email approval callback
 
-## Data model (high level)
-Core concepts:
-- **Customer**, **Vehicle**
-- **ServiceOrder** (aggregate root)
-- **ServiceItem**, **PartItem**
-- Status workflow: `RECEIVED` → `DIAGNOSIS` → `WAITING_APPROVAL` → `IN_PROGRESS` → `FINISHED` → `DELIVERED`
+`GET /public/service-orders/{id}/approval?token=...` is public, validates the token, and applies the decision.
 
-## Scalability & resilience considerations
-Current design choices that support scaling:
-- Stateless API + JWT → can scale API replicas horizontally behind a load balancer.
-- Clear layer boundaries → easier to evolve components independently.
-- Database migrations are automated on container startup (with an option to run manually).
+### Generic status update
 
-Expected next steps for full phase-2 infra (if required by the group):
-- Kubernetes manifests (Deployment/Service/ConfigMap/Secret/HPA).
-- Terraform for provisioning (cluster + database).
-- CI/CD pipeline running tests + building/publishing images + deploying manifests.
+`PATCH /service-orders/{id}/status` uses the same domain transition rules. When the target status is `WAITING_APPROVAL`, it sends the approval email instead of a generic status-change email.
 
-## Why these technologies (rationale)
-- **FastAPI**: strong typing + OpenAPI docs, high dev speed, async-friendly I/O for DB/SMTP.
-- **PostgreSQL**: reliable transactional store, good for relational workshop data (orders, items, customers, vehicles).
-- **SQLAlchemy + Alembic**: mature tooling; migrations keep schema evolution explicit and reviewable.
-- **Clean Architecture**: supports long-term maintainability, testability, and controlled dependencies.
-- **Docker Compose**: reproducible environment and “it runs with one command”, reducing operational risk for the project demo.
+## Observability
 
-## API documentation
-When running locally:
-- Swagger UI: `http://localhost:8000/docs`
+The implementation logs:
+
+- approval-token generation
+- approval-token validation failures
+- email sending attempts
+- approval and rejection actions
+- email-delivery failures during service-order creation

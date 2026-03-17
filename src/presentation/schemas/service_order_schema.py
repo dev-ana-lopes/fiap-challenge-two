@@ -95,6 +95,12 @@ class ApproveServiceOrderRequest(BaseModel):
     approved: bool
 
 
+class ApproveServiceOrderResponse(BaseModel):
+    success: bool = True
+    status: str
+    decision: str
+
+
 class UpdateServiceOrderStatusRequest(BaseModel):
     status: str
 
@@ -120,4 +126,3 @@ class ServiceOrderResponse(BaseModel):
     created_at: str
     service_items: list[ServiceItemResponse]
     part_items: list[PartItemResponse]
-

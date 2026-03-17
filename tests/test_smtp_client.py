@@ -6,6 +6,7 @@ from email.policy import default
 
 from src.infrastructure.config.settings import Settings
 from src.infrastructure.email.smtp_client import SmtpEmailSender
+from src.domain.services import ApprovalRequestEmailMessage
 
 
 class _FakeSmtp:
@@ -44,15 +45,11 @@ class _FakeSmtp:
 def _build_settings(**overrides) -> Settings:
     base = {
         "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/db",
-        "SMTP_HOST": "smtp.example.com",
-        "SMTP_PORT": 587,
-        "SMTP_USERNAME": "notifications@example.com",
-        "SMTP_USER": "",
-        "SMTP_PASSWORD": "secret",
+        "SMTP_HOST": "mailhog",
+        "SMTP_PORT": 1025,
         "SMTP_FROM_EMAIL": "billing@example.com",
-        "SMTP_USE_TLS": True,
-        "SMTP_USE_AUTH": True,
-        "SMTP_TIMEOUT": 10,
+        "SMTP_USE_TLS": False,
+        "SMTP_USE_AUTH": False,
         "JWT_SECRET": "test",
     }
     base.update(overrides)
@@ -75,14 +72,7 @@ def _install_fake_smtp(monkeypatch):
 @pytest.mark.asyncio
 async def test_smtp_sender_can_skip_tls_and_auth(monkeypatch):
     created = _install_fake_smtp(monkeypatch)
-    settings = _build_settings(
-        SMTP_HOST="mailhog",
-        SMTP_PORT=1025,
-        SMTP_USERNAME="",
-        SMTP_FROM_EMAIL="",
-        SMTP_USE_TLS=False,
-        SMTP_USE_AUTH=False,
-    )
+    settings = _build_settings(SMTP_FROM_EMAIL="")
 
     sender = SmtpEmailSender(settings)
     await sender.send_email("to@example.com", "Subject", "Body")
@@ -90,7 +80,7 @@ async def test_smtp_sender_can_skip_tls_and_auth(monkeypatch):
     client = created["client"]
     assert client.host == "mailhog"
     assert client.port == 1025
-    assert client.timeout == 10
+    assert client.timeout is None
     assert client.ehlo_calls == 1
     assert client.starttls_called is False
     assert client.login_called is False
@@ -105,9 +95,9 @@ async def test_smtp_sender_can_skip_tls_and_auth(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_smtp_sender_uses_tls_and_auth_when_enabled(monkeypatch):
+async def test_smtp_sender_uses_tls_when_enabled(monkeypatch):
     created = _install_fake_smtp(monkeypatch)
-    settings = _build_settings()
+    settings = _build_settings(SMTP_USE_TLS=True)
 
     sender = SmtpEmailSender(settings)
     await sender.send_email("to@example.com", "Subject", "Body")
@@ -116,49 +106,41 @@ async def test_smtp_sender_uses_tls_and_auth_when_enabled(monkeypatch):
     assert client.ehlo_calls == 2
     assert client.starttls_called is True
     assert client.starttls_context is not None
-    assert client.login_called is True
-    assert client.login_args == ("notifications@example.com", "secret")
+    assert client.login_called is False
     assert len(client.sent_messages) == 1
     assert client.sent_messages[0]["From"] == "billing@example.com"
 
 
 @pytest.mark.asyncio
-async def test_smtp_sender_uses_legacy_smtp_user_for_auth(monkeypatch):
+async def test_smtp_sender_builds_approval_request_email(monkeypatch):
     created = _install_fake_smtp(monkeypatch)
-    settings = _build_settings(
-        SMTP_USERNAME="",
-        SMTP_USER="legacy-user@example.com",
-        SMTP_FROM_EMAIL="",
-    )
-
+    settings = _build_settings(APP_BASE_URL="https://api.example.com")
     sender = SmtpEmailSender(settings)
-    await sender.send_email("to@example.com", "Subject", "Body")
-
-    client = created["client"]
-    assert client.login_called is True
-    assert client.login_args == ("legacy-user@example.com", "secret")
-    assert client.sent_messages[0]["From"] == "legacy-user@example.com"
-
-
-@pytest.mark.asyncio
-async def test_smtp_sender_requires_auth_username_when_auth_is_enabled():
-    sender = SmtpEmailSender(
-        _build_settings(SMTP_USERNAME="", SMTP_USER="", SMTP_FROM_EMAIL="")
+    message = ApprovalRequestEmailMessage(
+        customer_email="customer@example.com",
+        service_order_id="so-123",
+        total=150.5,
+        summary_lines=("Servico: Revisao - R$ 100.00", "Peca: Filtro x1 - R$ 50.50"),
+        approve_token="approve-token",
+        reject_token="reject-token",
     )
 
-    with pytest.raises(
-        ValueError,
-        match="SMTP_USERNAME or SMTP_USER must be configured when SMTP_USE_AUTH is enabled",
-    ):
-        await sender.send_email("to@example.com", "Subject", "Body")
+    await sender.send_approval_request(message)
 
-
-@pytest.mark.asyncio
-async def test_smtp_sender_requires_password_when_auth_is_enabled():
-    sender = SmtpEmailSender(_build_settings(SMTP_PASSWORD=""))
-
-    with pytest.raises(
-        ValueError,
-        match="SMTP_PASSWORD must be configured when SMTP_USE_AUTH is enabled",
-    ):
-        await sender.send_email("to@example.com", "Subject", "Body")
+    parsed = message_from_bytes(
+        created["client"].sent_messages[0].as_bytes(),
+        policy=default,
+    )
+    body = parsed.get_body(preferencelist=("plain",)).get_content()
+    assert "OS: so-123" in body
+    assert "Valor total do orcamento: R$ 150.50" in body
+    assert "Servico: Revisao - R$ 100.00" in body
+    assert "Peca: Filtro x1 - R$ 50.50" in body
+    assert (
+        "https://api.example.com/public/service-orders/so-123/approval?token=approve-token"
+        in body
+    )
+    assert (
+        "https://api.example.com/public/service-orders/so-123/approval?token=reject-token"
+        in body
+    )

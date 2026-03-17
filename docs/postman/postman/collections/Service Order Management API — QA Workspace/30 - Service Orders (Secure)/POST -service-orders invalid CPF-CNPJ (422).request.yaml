@@ -1,0 +1,27 @@
+$kind: http-request
+name: POST /service-orders invalid CPF/CNPJ (422)
+url: "{{base_url}}/service-orders"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "customer_name": "QA Invalid CPF",
+      "customer_cpf_cnpj": "123.456.789-00",
+      "customer_email": "{{service_order_customer_email}}",
+      "customer_phone": "11999999994",
+      "vehicle_brand": "Honda",
+      "vehicle_model": "Civic",
+      "vehicle_year": 2017,
+      "vehicle_plate": "BRA1E23",
+      "services": [
+        {"description": "Inspection", "price": 10.0}
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('status 422', () => pm.response.to.have.status(422));
+    language: text/javascript
+order: 8000
