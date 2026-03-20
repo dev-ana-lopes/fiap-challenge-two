@@ -8,6 +8,7 @@ from .fakes import (
     MockPartItemRepository,
     MockServiceItemRepository,
     MockServiceOrderRepository,
+    MockUserRepository,
     MockVehicleRepository,
 )
 from .test_app import create_test_app
@@ -22,6 +23,7 @@ __all__ = [
     "MockPartItemRepository",
     "MockServiceItemRepository",
     "MockServiceOrderRepository",
+    "MockUserRepository",
     "MockVehicleRepository",
     "create_test_app",
 ]

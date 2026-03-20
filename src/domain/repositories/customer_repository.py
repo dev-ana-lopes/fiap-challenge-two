@@ -7,7 +7,6 @@ from ..entities import Customer
 
 
 class CustomerRepository(ABC):
-
     @abstractmethod
     async def save(self, customer: Customer) -> None:
         pass

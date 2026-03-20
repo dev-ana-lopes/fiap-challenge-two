@@ -1,88 +1,70 @@
 # Architecture
 
-## Architectural style
+## Estilo arquitetural
 
-The codebase follows Clean Architecture:
+O projeto permanece como backend monolítico e segue Clean Architecture com quatro camadas:
 
-- `src/domain`: entities, enums, errors, repository contracts, email and token ports
-- `src/application`: use cases that orchestrate service-order flows
-- `src/infrastructure`: PostgreSQL repositories, SMTP sender, JWT services, settings
-- `src/presentation`: FastAPI routes, request and response schemas, dependency wiring
+- `domain`: regras de negócio puras, entidades e contratos
+- `application`: casos de uso e orquestração
+- `infrastructure`: adapters de banco, email, JWT e configurações
+- `presentation`: HTTP/FastAPI, schemas e dependências
 
-Routes do not contain business rules. They translate HTTP requests into use-case calls and map domain or application errors to HTTP responses.
+## Agregado principal
 
-## Approval by email design
+`ServiceOrder` concentra:
 
-### Ports introduced or reinforced
+- status da OS
+- cálculo de orçamento
+- datas de início e fim
+- decisão de aprovação
+- regra de transição de estados
 
-- `EmailSender`: notification contract used by create, status-update, and approval flows
-- `ApprovalTokenService`: token generation and validation contract for public approval links
+Status válidos do domínio:
 
-### Infrastructure implementations
+- `RECEIVED`
+- `DIAGNOSIS`
+- `WAITING_APPROVAL`
+- `IN_PROGRESS`
+- `FINISHED`
+- `DELIVERED`
 
-- `SmtpEmailSender`: builds the approval email template and public approve or reject URLs using `APP_BASE_URL`
-- `JwtApprovalTokenService`: signs approval tokens with expiration using `APPROVAL_TOKEN_SECRET`
+Regra adotada para reprovação:
 
-For local development, the SMTP provider is MailHog. Testmail is not part of runtime delivery; it is only used by the optional live suite to poll inbox contents by API.
+- aprovação move `WAITING_APPROVAL -> IN_PROGRESS`
+- reprovação move `WAITING_APPROVAL -> DIAGNOSIS`
+- a decisão e o motivo ficam registrados na OS
 
-### Shared approval workflow
+## Fluxo de abertura
 
-1. A service order reaches `WAITING_APPROVAL`
-2. `SendApprovalRequestEmailUseCase` generates an approve token and a reject token
-3. The SMTP adapter composes an email with:
-   - service-order id
-   - budget total
-   - budget summary
-   - approve link
-   - reject link
-4. The public callback validates the token and delegates to the same decision use case used by manual approval
+1. cliente, veículo, serviços e peças são cadastrados previamente
+2. `POST /service-orders` recebe `customer_id`, `vehicle_id`, `service_ids` e `part_refs`
+3. o caso de uso consolida os itens e calcula o orçamento
+4. o estoque é reduzido para as peças consumidas
+5. a OS é criada em `WAITING_APPROVAL`
+6. o cliente recebe email com links de aprovação e reprovação
 
-## Security decisions
+## Fluxos de aprovação
 
-- Approval links use signed tokens instead of predictable query parameters
-- Tokens include the service-order id, decision, purpose, and expiration
-- The public callback checks:
-  - invalid signature or malformed payload
-  - expired token
-  - token and service-order mismatch
-  - already processed approval decision
+- administrativo: `POST /service-orders/{id}/approval`
+- link público: `GET /public/service-orders/{id}/approval?token=...`
+- notificação externa: `POST /public/service-orders/{id}/approval`
 
-## Status rules
+Todos convergem para o mesmo caso de uso de decisão.
 
-The domain entity `ServiceOrder` owns the transition map. Relevant transitions for the phase-2 flow:
+## Ordenação da listagem ativa
 
-- `RECEIVED -> DIAGNOSIS | WAITING_APPROVAL | CANCELLED`
-- `DIAGNOSIS -> WAITING_APPROVAL | IN_PROGRESS | CANCELLED`
-- `WAITING_APPROVAL -> IN_PROGRESS | CANCELLED`
-- `IN_PROGRESS -> FINISHED | CANCELLED`
-- `FINISHED -> DELIVERED`
+`GET /service-orders/active`:
 
-Budget rejection is explicitly documented as `WAITING_APPROVAL -> CANCELLED`.
+- não lista `FINISHED` e `DELIVERED`
+- ordena por prioridade:
+  `IN_PROGRESS`, `WAITING_APPROVAL`, `DIAGNOSIS`, `RECEIVED`
+- dentro da mesma prioridade, retorna mais antigas primeiro
 
-## Main runtime flows
+## Infraestrutura
 
-### Create service order
-
-`POST /service-orders` creates the aggregate in `WAITING_APPROVAL`, persists items, and tries to send the approval email. Email-delivery failure is logged but does not roll back order creation.
-
-### Manual approval
-
-`POST /service-orders/{id}/approval` is authenticated and accepts a payload with `approved: true|false`.
-
-### Email approval callback
-
-`GET /public/service-orders/{id}/approval?token=...` is public, validates the token, and applies the decision.
-
-### Generic status update
-
-`PATCH /service-orders/{id}/status` uses the same domain transition rules. When the target status is `WAITING_APPROVAL`, it sends the approval email instead of a generic status-change email.
-
-## Observability
-
-The implementation logs:
-
-- approval-token generation
-- approval-token validation failures
-- email sending attempts
-- approval and rejection actions
-- email-delivery failures during service-order creation
+- PostgreSQL + Alembic para persistência
+- SMTP para envio de emails
+- MailHog para QA local
+- Testmail apenas nos testes live opcionais
+- Docker Compose para ambiente local
+- Kubernetes + Terraform + GitHub Actions para deploy

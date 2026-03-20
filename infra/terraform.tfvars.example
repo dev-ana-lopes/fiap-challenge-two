@@ -1,0 +1,8 @@
+aws_region          = "us-east-1"
+project_name        = "service-order-api"
+cluster_name        = "service-order-eks"
+db_name             = "service_order_db"
+db_username         = "service_order_user"
+db_password         = "change-me"
+db_instance_class   = "db.t4g.micro"
+db_allocated_storage = 20

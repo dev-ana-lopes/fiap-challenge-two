@@ -23,4 +23,3 @@ async def get_average_execution_time(
     use_case = GetAverageExecutionTimeUseCase(service_order_repo)
     avg = await use_case.execute()
     return AverageExecutionTimeResponse(average_execution_time_seconds=avg)
-

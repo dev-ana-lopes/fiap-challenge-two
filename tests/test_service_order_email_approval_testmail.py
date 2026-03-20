@@ -59,7 +59,8 @@ async def test_service_order_email_approval_flow_with_testmail_live():
     settings = Settings()
     if not is_testmail_live_enabled(settings):
         pytest.skip(
-            "Testmail live test requires TESTMAIL_ENABLED=true, TESTMAIL_API_KEY and TESTMAIL_NAMESPACE"
+            "Testmail live test requires TESTMAIL_ENABLED=true, "
+            "TESTMAIL_API_KEY and TESTMAIL_NAMESPACE"
         )
 
     app = create_test_app()
@@ -127,7 +128,7 @@ async def test_service_order_email_approval_flow_with_testmail_live():
                 json=_create_service_order_payload(recipient),
             )
 
-            assert create_response.status_code == 200
+            assert create_response.status_code == 201
             service_order_id = create_response.json()["service_order_id"]
 
             messages = wait_for_testmail_messages(settings, tag, timeout_seconds=45)

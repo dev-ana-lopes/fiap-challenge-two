@@ -1,10 +1,9 @@
 from passlib.context import CryptContext
 
-password_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 class PasswordHasher:
-
     @staticmethod
     def hash_password(password: str) -> str:
         return password_context.hash(password)

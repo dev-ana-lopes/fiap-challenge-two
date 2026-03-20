@@ -1,12 +1,5 @@
-from sqlalchemy import (
-    UUID,
-    Column,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    func,
-)
+from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, func
+
 from .base import Base
 
 

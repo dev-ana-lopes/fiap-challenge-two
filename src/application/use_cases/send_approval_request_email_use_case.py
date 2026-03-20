@@ -49,7 +49,8 @@ class SendApprovalRequestEmailUseCase:
             lines.append(f"Servico: {item.description} - R$ {item.price:.2f}")
         for item in service_order.part_items:
             lines.append(
-                f"Peca: {item.name} x{item.quantity} - R$ {item.price * item.quantity:.2f}"
+                f"Peca: {item.name} x{item.quantity} - "
+                f"R$ {item.price * item.quantity:.2f}"
             )
         if not lines:
             lines.append("Sem itens detalhados no orcamento.")

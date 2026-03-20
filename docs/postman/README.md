@@ -1,94 +1,43 @@
-# Postman QA Workspace
+# Postman
 
-The collection covers the secure service-order endpoints and the public approval callback introduced for phase 2.
+Arquivos:
 
-## Recommended local setup
+- `ServiceOrderAPI.postman_collection.json`
+- `ServiceOrderAPI.local.postman_environment.json`
 
-```bash
-cp .env.example .env
-docker compose up -d --build
-```
+## Como usar
 
-Useful URLs:
-- Swagger: `http://localhost:8000/docs`
-- MailHog: `http://localhost:8025`
+1. importe a collection
+2. importe o environment local
+3. ajuste apenas `base_url`
+4. rode a collection inteira no Runner ou, se preferir, a sequencia `Health -> Auth -> Customers -> Vehicles -> Catalog -> Service Orders -> Metrics`
 
-## Files
+## O que a collection automatiza
 
-- `docs/postman/ServiceOrderAPI.postman_collection.json`
-- `docs/postman/ServiceOrderAPI.local.postman_environment.json`
-- `docs/postman/ServiceOrderAPI.email-approval.postman_collection.json`
-- `docs/postman/ServiceOrderAPI.email-approval.local.postman_environment.json`
+- gera credenciais e dados unicos por execucao
+- salva `access_token` automaticamente apos `POST /auth/login`
+- salva `customer_id`, `vehicle_id`, `service_id`, `part_id` e `service_order_id` automaticamente
+- evita conflitos de reexecucao para usuario, cliente, veiculo e catalogo
 
-## Environment variables in Postman
+## Variaveis que continuam opcionais
 
-- `base_url`
-- `access_token`
-- `service_order_id`
-- `service_order_id_manual_approve`
-- `service_order_id_manual_reject`
-- `service_order_id_status_update`
-- `service_order_id_public_approval`
-- `approval_email_token`
-- `approval_email_link`
-- `testmail_namespace`
-- `vehicle_customer_email`
-- `vehicle_customer_id`
+- `approval_token`
 
-`approval_email_token` and `approval_email_link` are manual helper variables. Fill them from MailHog or Testmail when you want to call the public approval callback directly from Postman.
+Use `approval_token` apenas para os endpoints publicos de aprovacao. Esse valor nao e capturado automaticamente pela collection porque depende do fluxo de email.
 
-## Recommended execution order
+## Fluxo esperado
 
-1. `00 - Health`
-2. `10 - Auth`
-3. `20 - Setup (Admin Data)`
-4. `30 - Service Orders (Secure)`
-5. Open MailHog/Testmail, copy the token for `service_order_id_public_approval`
-6. Set `approval_email_token`
-7. `40 - Public`
+1. `GET /health`
+2. `POST /auth/register`
+3. `POST /auth/login`
+4. `POST /customers`
+5. `POST /vehicles`
+6. `POST /catalog/services`
+7. `POST /catalog/parts`
+8. `POST /service-orders`
+9. `GET /service-orders/{id}`
+10. `POST /service-orders/{id}/approval`
+11. `PATCH /service-orders/{id}/status`
+12. `GET /metrics/average-execution-time`
 
-The collection is organized for sequential execution. Manual approve, manual reject, public approval, and status update now use different service-order ids so one scenario does not invalidate the next.
-
-## Email approval note
-
-The collection does not fetch the email automatically. The intended local flow is:
-
-1. Create the service order
-2. Open MailHog or Testmail
-3. Copy the approval link or token from the email
-4. Paste it into `approval_email_link` or `approval_email_token`
-5. Call the public approval request in folder `40 - Public`
-
-Local use:
-- MailHog is the normal source for the approval email in local runs
-- the request `GET /public/service-orders/{{service_order_id_public_approval}}/approval?token={{approval_email_token}}` will fail early with a clear message if the token was not filled
-
-Runner note:
-- the public callback remains manual by design
-- all other requests are structured to run in order in Postman Runner/Newman without reusing the same terminal service-order state
-
-## Vehicles folder note
-
-The folder `60 - Vehicles` is self-contained:
-- it creates its own support customer and stores the id in `vehicle_customer_id`
-- it uses `vehicle_customer_email` for that setup customer
-- it does not depend on `50 - Customers (Secure)` or on `customer_id_customers_crud`
-
-This allows the vehicles flow to run in isolation or as part of the full runner sequence without stale customer ids causing `POST /vehicles` to fail with `404`.
-
-## Focused email approval collection
-
-If you want only the manual email-approval scenario, use:
-- `docs/postman/ServiceOrderAPI.email-approval.postman_collection.json`
-- `docs/postman/ServiceOrderAPI.email-approval.local.postman_environment.json`
-
-Recommended order:
-1. `00 - Health`
-2. `10 - Auth`
-3. `20 - Email Approval -> POST /service-orders`
-4. Open MailHog or Testmail and copy the approval token
-5. Set `approval_email_token`
-6. Run the manual approval request
-7. Run the final public status check
-
-This focused collection avoids the rest of the QA suite and is intended only for the budget approval by email demo flow.
+O Swagger em `/docs` e a collection usam as mesmas rotas finais.

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, DateTime, ForeignKey, String, UUID, func
+from sqlalchemy import UUID, Column, DateTime, ForeignKey, String, func
+
 from .base import Base
 
 
@@ -11,6 +12,9 @@ class ServiceOrderModel(Base):
     status = Column(String(50), nullable=False, default="RECEIVED")
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
+    approval_decision = Column(String(20), nullable=True)
+    approval_decision_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(
         DateTime, default=func.now(), onupdate=func.now(), nullable=False

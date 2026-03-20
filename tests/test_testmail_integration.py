@@ -22,7 +22,8 @@ async def test_smtp_sender_delivers_message_to_testmail_live():
     settings = Settings()
     if not is_testmail_live_enabled(settings):
         pytest.skip(
-            "Testmail live test requires TESTMAIL_ENABLED=true, TESTMAIL_API_KEY and TESTMAIL_NAMESPACE"
+            "Testmail live test requires TESTMAIL_ENABLED=true, "
+            "TESTMAIL_API_KEY and TESTMAIL_NAMESPACE"
         )
 
     sender = SmtpEmailSender(settings)

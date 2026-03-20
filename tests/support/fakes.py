@@ -6,7 +6,6 @@ from uuid import UUID
 from src.domain.entities import Customer, ServiceOrder
 from src.domain.enums import ServiceOrderStatus
 from src.domain.errors import ExpiredApprovalTokenError, InvalidApprovalTokenError
-from src.domain.services import ApprovalRequestEmailMessage, ApprovalTokenPayload
 from src.domain.repositories import (
     CustomerRepository,
     PartItemRepository,
@@ -14,6 +13,8 @@ from src.domain.repositories import (
     ServiceOrderRepository,
     VehicleRepository,
 )
+from src.domain.services import ApprovalRequestEmailMessage, ApprovalTokenPayload
+from src.domain.time import utcnow
 
 
 class MockCustomerRepository(CustomerRepository):
@@ -84,23 +85,30 @@ class MockServiceOrderRepository(ServiceOrderRepository):
     async def save(self, service_order: ServiceOrder) -> None:
         self.service_orders[service_order.id] = service_order
 
+    async def update(self, service_order: ServiceOrder) -> None:
+        self.service_orders[service_order.id] = service_order
+
     async def get_by_id(self, service_order_id) -> ServiceOrder | None:
         return self.service_orders.get(service_order_id)
+
+    async def list_all(self) -> list[ServiceOrder]:
+        return sorted(self.service_orders.values(), key=lambda order: order.created_at)
 
     async def update_status(self, service_order_id, status) -> None:
         if service_order_id in self.service_orders:
             service_order = self.service_orders[service_order_id]
             service_order.status = status
+            service_order.updated_at = utcnow()
 
     async def set_started_at(self, service_order_id) -> None:
         if service_order_id in self.service_orders:
             service_order = self.service_orders[service_order_id]
-            service_order.started_at = datetime.utcnow()
+            service_order.started_at = utcnow()
 
     async def set_finished_at(self, service_order_id) -> None:
         if service_order_id in self.service_orders:
             service_order = self.service_orders[service_order_id]
-            service_order.finished_at = datetime.utcnow()
+            service_order.finished_at = utcnow()
 
     async def get_average_execution_time_seconds(self) -> float | None:
         durations = []
@@ -120,11 +128,7 @@ class MockServiceOrderRepository(ServiceOrderRepository):
             service_order
             for service_order in self.service_orders.values()
             if service_order.status
-            not in [
-                ServiceOrderStatus.FINISHED,
-                ServiceOrderStatus.DELIVERED,
-                ServiceOrderStatus.CANCELLED,
-            ]
+            not in [ServiceOrderStatus.FINISHED, ServiceOrderStatus.DELIVERED]
         ]
 
 
@@ -283,3 +287,17 @@ class MockInventoryPartRepository:
             return False
         part.stock_quantity -= quantity
         return True
+
+
+class MockUserRepository:
+    def __init__(self):
+        self.users = {}
+
+    async def save(self, user) -> None:
+        self.users[user.id] = user
+
+    async def get_by_email(self, email: str):
+        for user in self.users.values():
+            if user.email == email:
+                return user
+        return None

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from jose import JWTError, ExpiredSignatureError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 from ...domain.errors import ExpiredApprovalTokenError, InvalidApprovalTokenError
 from ...domain.services import ApprovalTokenPayload, ApprovalTokenService

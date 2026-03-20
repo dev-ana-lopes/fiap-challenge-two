@@ -5,9 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities import CatalogService
 from src.domain.repositories import CatalogServiceRepository
-from src.infrastructure.database.models.catalog_service_model import (
-    CatalogServiceModel,
-)
+from src.infrastructure.database.models.catalog_service_model import CatalogServiceModel
 
 
 class PostgresCatalogServiceRepository(CatalogServiceRepository):
@@ -75,4 +73,3 @@ class PostgresCatalogServiceRepository(CatalogServiceRepository):
             )
             for m in models
         ]
-

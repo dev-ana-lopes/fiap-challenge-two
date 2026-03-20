@@ -2,37 +2,36 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.services import ApprovalTokenService, EmailSender
-from ...infrastructure.database.session import DatabaseSession
 from ...infrastructure.config.settings import Settings, get_settings
-from ...infrastructure.database.repositories.customer_repository import (
-    PostgresCustomerRepository,
-)
 from ...infrastructure.database.repositories.catalog_service_repository import (
     PostgresCatalogServiceRepository,
+)
+from ...infrastructure.database.repositories.customer_repository import (
+    PostgresCustomerRepository,
 )
 from ...infrastructure.database.repositories.inventory_part_repository import (
     PostgresInventoryPartRepository,
 )
-from ...infrastructure.database.repositories.vehicle_repository import (
-    PostgresVehicleRepository,
-)
-from ...infrastructure.database.repositories.service_order_repository import (
-    PostgresServiceOrderRepository,
+from ...infrastructure.database.repositories.part_item_repository import (
+    PostgresPartItemRepository,
 )
 from ...infrastructure.database.repositories.service_item_repository import (
     PostgresServiceItemRepository,
 )
-from ...infrastructure.database.repositories.part_item_repository import (
-    PostgresPartItemRepository,
+from ...infrastructure.database.repositories.service_order_repository import (
+    PostgresServiceOrderRepository,
 )
 from ...infrastructure.database.repositories.user_repository import (
     PostgresUserRepository,
 )
+from ...infrastructure.database.repositories.vehicle_repository import (
+    PostgresVehicleRepository,
+)
+from ...infrastructure.database.session import DatabaseSession
 from ...infrastructure.email.approval_token_service import JwtApprovalTokenService
-from ...infrastructure.email.smtp_client import SmtpEmailSender
 from ...infrastructure.email.jwt_service import JwtService
 from ...infrastructure.email.password_hasher import PasswordHasher
-
+from ...infrastructure.email.smtp_client import SmtpEmailSender
 
 database_session: DatabaseSession | None = None
 

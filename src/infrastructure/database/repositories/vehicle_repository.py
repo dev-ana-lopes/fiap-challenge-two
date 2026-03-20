@@ -12,7 +12,6 @@ from ..models.vehicle_model import VehicleModel
 
 
 class PostgresVehicleRepository(VehicleRepository):
-
     def __init__(self, session: AsyncSession):
         self.session = session
 

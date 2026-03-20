@@ -24,4 +24,3 @@ class CatalogServiceRepository(ABC):
     @abstractmethod
     async def list(self) -> list[CatalogService]:
         pass
-

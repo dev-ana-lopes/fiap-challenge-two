@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from jose import JWTError, jwt
 
+from ...domain.time import utcnow
 from ..config.settings import Settings
 
 
@@ -11,9 +12,7 @@ class JwtService:
         self.settings = settings
 
     def create_token(self, user_id: str, email: str) -> str:
-        expire = datetime.utcnow() + timedelta(
-            minutes=self.settings.JWT_EXPIRATION_MINUTES
-        )
+        expire = utcnow() + timedelta(minutes=self.settings.JWT_EXPIRATION_MINUTES)
         payload = {
             "user_id": user_id,
             "email": email,

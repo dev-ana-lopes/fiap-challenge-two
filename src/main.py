@@ -16,7 +16,6 @@ from .presentation.api.routes import (
 )
 from .presentation.dependencies.db_dependencies import init_database
 
-
 settings = get_settings()
 
 
@@ -29,9 +28,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Service Order Management API",
-    description="API for managing mechanical workshop service orders",
-    version="1.0.0",
+    title="Tech Challenge Workshop Service Orders API",
+    description=(
+        "Backend monolith for customers, vehicles, services, parts and "
+        "mechanical workshop service orders."
+    ),
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -54,12 +56,10 @@ app.include_router(metrics_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "service-order-api", "version": "2.0.0"}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        app, host="0.0.0.0", port=8000, reload=True
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

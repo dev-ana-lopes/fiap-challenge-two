@@ -9,7 +9,6 @@ from src.infrastructure.database.models.customer_model import CustomerModel
 
 
 class PostgresCustomerRepository(CustomerRepository):
-
     def __init__(self, session: AsyncSession):
         self.session = session
 

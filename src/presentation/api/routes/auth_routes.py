@@ -1,7 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ....application.dto.login_dto import LoginDTO
 from ....application.use_cases.auth_use_case import (
@@ -12,7 +11,10 @@ from ....domain.repositories.user_repository import UserRepository
 from ....infrastructure.email.jwt_service import JwtService
 from ....infrastructure.email.password_hasher import PasswordHasher
 from ....presentation.dependencies.db_dependencies import (
-    get_jwt_service, get_password_hasher, get_user_repository)
+    get_jwt_service,
+    get_password_hasher,
+    get_user_repository,
+)
 from ....presentation.schemas.service_order_schema import (
     LoginRequest,
     LoginResponse,
@@ -41,43 +43,52 @@ async def register(
     return RegisterResponse(user_id=user_id)
 
 
-@router.post("/login")
-async def login(
-    form_data: Annotated[OAuth2PasswordBearer, Depends()],
-    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
-    jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
+async def _authenticate(
+    email: str,
+    password: str,
+    user_repo: UserRepository,
+    password_hasher: PasswordHasher,
+    jwt_service: JwtService,
 ) -> LoginResponse:
-    dto = LoginDTO(email=form_data.username, password=form_data.password)
-
+    dto = LoginDTO(email=email, password=password)
     use_case = AuthenticateUserUseCase(user_repo, password_hasher, jwt_service)
     token = await use_case.execute(dto)
-
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-
     return LoginResponse(access_token=token)
 
 
-@router.post("/login-json")
-async def login_json(
+@router.post("/login")
+async def login(
     request: LoginRequest,
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
     password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
     jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
 ) -> LoginResponse:
-    dto = LoginDTO(email=request.email, password=request.password)
+    return await _authenticate(
+        request.email,
+        request.password,
+        user_repo,
+        password_hasher,
+        jwt_service,
+    )
 
-    use_case = AuthenticateUserUseCase(user_repo, password_hasher, jwt_service)
-    token = await use_case.execute(dto)
 
-    if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
-
-    return LoginResponse(access_token=token)
+@router.post("/token")
+async def token(
+    request: Request,
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
+) -> LoginResponse:
+    form = await request.form()
+    return await _authenticate(
+        str(form.get("username", "")),
+        str(form.get("password", "")),
+        user_repo,
+        password_hasher,
+        jwt_service,
+    )

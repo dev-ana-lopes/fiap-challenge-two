@@ -98,4 +98,3 @@ class InventoryPartResponse(BaseModel):
 
 class AverageExecutionTimeResponse(BaseModel):
     average_execution_time_seconds: float | None
-

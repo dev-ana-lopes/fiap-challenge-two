@@ -5,9 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities import InventoryPart
 from src.domain.repositories import InventoryPartRepository
-from src.infrastructure.database.models.inventory_part_model import (
-    InventoryPartModel,
-)
+from src.infrastructure.database.models.inventory_part_model import InventoryPartModel
 
 
 class PostgresInventoryPartRepository(InventoryPartRepository):
@@ -111,4 +109,3 @@ class PostgresInventoryPartRepository(InventoryPartRepository):
         result = await self.session.execute(stmt)
         await self.session.commit()
         return (result.rowcount or 0) > 0
-

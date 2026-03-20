@@ -14,10 +14,7 @@ def is_testmail_live_enabled(settings: Settings) -> bool:
         settings.TESTMAIL_ENABLED
         and settings.TESTMAIL_API_KEY
         and settings.TESTMAIL_NAMESPACE
-        and not (
-            settings.SMTP_HOST == "mailhog"
-            and settings.SMTP_PORT == 1025
-        )
+        and not (settings.SMTP_HOST == "mailhog" and settings.SMTP_PORT == 1025)
     )
 
 

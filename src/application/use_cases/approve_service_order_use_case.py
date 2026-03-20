@@ -24,8 +24,11 @@ class ApproveServiceOrderUseCase:
         )
 
     async def execute(
-        self, service_order_id: UUID, approved: bool
+        self,
+        service_order_id: UUID,
+        approved: bool,
+        rejection_reason: str | None = None,
     ) -> ServiceOrderStatus:
         return await self.apply_service_order_approval_use_case.execute(
-            service_order_id, approved
+            service_order_id, approved, rejection_reason
         )

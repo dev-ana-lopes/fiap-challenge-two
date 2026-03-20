@@ -1,13 +1,8 @@
 from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, status
 from uuid import UUID
 
-from ....domain.errors import (
-    ApprovalActionAlreadyProcessedError,
-    InvalidServiceOrderTransitionError,
-    ServiceOrderNotFoundError,
-)
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from ....application.dto.create_service_order_dto import CreateServiceOrderDTO
 from ....application.use_cases.approve_service_order_use_case import (
     ApproveServiceOrderUseCase,
@@ -15,14 +10,25 @@ from ....application.use_cases.approve_service_order_use_case import (
 from ....application.use_cases.create_service_order_use_case import (
     CreateServiceOrderUseCase,
 )
+from ....application.use_cases.get_service_order_details_use_case import (
+    GetServiceOrderDetailsUseCase,
+)
 from ....application.use_cases.get_service_order_status_use_case import (
     GetServiceOrderStatusUseCase,
 )
 from ....application.use_cases.list_active_service_orders_use_case import (
     ListActiveServiceOrdersUseCase,
 )
+from ....application.use_cases.list_service_orders_use_case import (
+    ListServiceOrdersUseCase,
+)
 from ....application.use_cases.update_service_order_status_use_case import (
     UpdateServiceOrderStatusUseCase,
+)
+from ....domain.errors import (
+    ApprovalActionAlreadyProcessedError,
+    InvalidServiceOrderTransitionError,
+    ServiceOrderNotFoundError,
 )
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
@@ -65,7 +71,57 @@ EmailSender = Annotated[object, Depends(get_email_sender)]
 ApprovalTokenSvc = Annotated[object, Depends(get_approval_token_service)]
 
 
-@router.post("")
+def _to_service_order_response(service_order) -> ServiceOrderResponse:
+    return ServiceOrderResponse(
+        id=str(service_order.id),
+        customer_id=str(service_order.customer_id),
+        vehicle_id=str(service_order.vehicle_id),
+        status=service_order.status.value,
+        created_at=service_order.created_at.isoformat(),
+        updated_at=service_order.updated_at.isoformat(),
+        started_at=(
+            service_order.started_at.isoformat()
+            if service_order.started_at is not None
+            else None
+        ),
+        finished_at=(
+            service_order.finished_at.isoformat()
+            if service_order.finished_at is not None
+            else None
+        ),
+        budget_total=service_order.budget_total,
+        approval_decision=(
+            service_order.approval_decision.value
+            if service_order.approval_decision is not None
+            else None
+        ),
+        approval_decision_at=(
+            service_order.approval_decision_at.isoformat()
+            if service_order.approval_decision_at is not None
+            else None
+        ),
+        rejection_reason=service_order.rejection_reason,
+        service_items=[
+            ServiceItemResponse(
+                id=str(item.id),
+                description=item.description,
+                price=item.price,
+            )
+            for item in service_order.service_items
+        ],
+        part_items=[
+            PartItemResponse(
+                id=str(item.id),
+                name=item.name,
+                price=item.price,
+                quantity=item.quantity,
+            )
+            for item in service_order.part_items
+        ],
+    )
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_service_order(
     request: CreateServiceOrderRequest,
     customer_repo: CustomerRepo,
@@ -84,6 +140,8 @@ async def create_service_order(
             detail="Either services or service_ids must be provided",
         )
     dto = CreateServiceOrderDTO(
+        customer_id=request.customer_id,
+        vehicle_id=request.vehicle_id,
         customer_name=request.customer_name,
         customer_cpf_cnpj=request.customer_cpf_cnpj,
         customer_email=request.customer_email,
@@ -133,12 +191,28 @@ async def create_service_order(
 
     try:
         service_order_id = await use_case.execute(dto)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
     return CreateServiceOrderResponse(service_order_id=service_order_id)
+
+
+@router.get("/active")
+async def list_active_service_orders(
+    service_order_repo: ServiceOrderRepo,
+) -> list[ServiceOrderResponse]:
+    use_case = ListActiveServiceOrdersUseCase(service_order_repo)
+    return [
+        _to_service_order_response(service_order)
+        for service_order in await use_case.execute()
+    ]
 
 
 @router.get("/{id}/status")
@@ -148,14 +222,50 @@ async def get_service_order_status(
 ) -> ServiceOrderStatusResponse:
     use_case = GetServiceOrderStatusUseCase(service_order_repo)
     order_status = await use_case.execute(id)
+    detail_use_case = GetServiceOrderDetailsUseCase(service_order_repo)
+    service_order = await detail_use_case.execute(id)
 
-    if order_status is None:
+    if order_status is None or service_order is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Service order not found",
         )
 
-    return ServiceOrderStatusResponse(status=order_status)
+    return ServiceOrderStatusResponse(
+        status=order_status,
+        approval_decision=(
+            service_order.approval_decision.value
+            if service_order.approval_decision is not None
+            else None
+        ),
+        rejection_reason=service_order.rejection_reason,
+    )
+
+
+@router.get("/{id}")
+async def get_service_order(
+    id: UUID,
+    service_order_repo: ServiceOrderRepo,
+) -> ServiceOrderResponse:
+    use_case = GetServiceOrderDetailsUseCase(service_order_repo)
+    service_order = await use_case.execute(id)
+    if service_order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service order not found",
+        )
+    return _to_service_order_response(service_order)
+
+
+@router.get("")
+async def list_service_orders(
+    service_order_repo: ServiceOrderRepo,
+) -> list[ServiceOrderResponse]:
+    use_case = ListServiceOrdersUseCase(service_order_repo)
+    return [
+        _to_service_order_response(service_order)
+        for service_order in await use_case.execute()
+    ]
 
 
 @router.post("/{id}/approval")
@@ -170,7 +280,11 @@ async def approve_service_order(
         service_order_repo, customer_repo, email_sender
     )
     try:
-        updated_status = await use_case.execute(id, request.approved)
+        updated_status = await use_case.execute(
+            id,
+            request.approved,
+            request.rejection_reason,
+        )
     except ServiceOrderNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -185,49 +299,8 @@ async def approve_service_order(
     return ApproveServiceOrderResponse(
         status=updated_status.value,
         decision="APPROVED" if request.approved else "REJECTED",
+        rejection_reason=request.rejection_reason if not request.approved else None,
     )
-
-
-@router.get("")
-async def list_service_orders(
-    service_order_repo: ServiceOrderRepo,
-) -> list[ServiceOrderResponse]:
-    use_case = ListActiveServiceOrdersUseCase(service_order_repo)
-    service_orders = await use_case.execute()
-
-    response = []
-    for so in service_orders:
-        service_items = [
-            ServiceItemResponse(
-                id=str(s.id),
-                description=s.description,
-                price=s.price,
-            )
-            for s in so.service_items
-        ]
-        part_items = [
-            PartItemResponse(
-                id=str(p.id),
-                name=p.name,
-                price=p.price,
-                quantity=p.quantity,
-            )
-            for p in so.part_items
-        ]
-
-        response.append(
-            ServiceOrderResponse(
-                id=str(so.id),
-                customer_id=str(so.customer_id),
-                vehicle_id=str(so.vehicle_id),
-                status=so.status.value,
-                created_at=so.created_at.isoformat(),
-                service_items=service_items,
-                part_items=part_items,
-            )
-        )
-
-    return response
 
 
 @router.patch("/{id}/status")

@@ -7,7 +7,6 @@ from ..entities import Vehicle
 
 
 class VehicleRepository(ABC):
-
     @abstractmethod
     async def save(self, vehicle: Vehicle) -> None:
         pass

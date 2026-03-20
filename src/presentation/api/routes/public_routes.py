@@ -3,11 +3,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ....application.use_cases.apply_service_order_approval_decision_use_case import (
+    ApplyServiceOrderApprovalDecisionUseCase,
+)
 from ....application.use_cases.approve_service_order_by_token_use_case import (
     ApproveServiceOrderByTokenUseCase,
 )
-from ....application.use_cases.apply_service_order_approval_decision_use_case import (
-    ApplyServiceOrderApprovalDecisionUseCase,
+from ....application.use_cases.get_service_order_status_use_case import (
+    GetServiceOrderStatusUseCase,
 )
 from ....domain.errors import (
     ApprovalActionAlreadyProcessedError,
@@ -15,9 +18,6 @@ from ....domain.errors import (
     ExpiredApprovalTokenError,
     InvalidApprovalTokenError,
     ServiceOrderNotFoundError,
-)
-from ....application.use_cases.get_service_order_status_use_case import (
-    GetServiceOrderStatusUseCase,
 )
 from ....presentation.dependencies.db_dependencies import (
     get_approval_token_service,
@@ -27,6 +27,7 @@ from ....presentation.dependencies.db_dependencies import (
 )
 from ....presentation.schemas.service_order_schema import (
     ApproveServiceOrderResponse,
+    ExternalApprovalDecisionRequest,
     ServiceOrderStatusResponse,
 )
 
@@ -76,6 +77,58 @@ async def approve_service_order_from_email_link(
 
     try:
         updated_status = await use_case.execute(id, token)
+    except InvalidApprovalTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except ExpiredApprovalTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=str(exc),
+        ) from exc
+    except ApprovalTokenMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except ServiceOrderNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service order not found",
+        ) from exc
+    except ApprovalActionAlreadyProcessedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return ApproveServiceOrderResponse(
+        status=updated_status.value,
+        decision=("APPROVED" if updated_status.value == "IN_PROGRESS" else "REJECTED"),
+    )
+
+
+@router.post("/service-orders/{id}/approval")
+async def approve_service_order_from_external_notification(
+    id: UUID,
+    request: ExternalApprovalDecisionRequest,
+    service_order_repo: ServiceOrderRepo,
+    customer_repo: CustomerRepo,
+    email_sender: EmailSender,
+    approval_token_service: ApprovalTokenSvc,
+) -> ApproveServiceOrderResponse:
+    apply_decision_use_case = ApplyServiceOrderApprovalDecisionUseCase(
+        service_order_repo,
+        customer_repo,
+        email_sender,
+    )
+    use_case = ApproveServiceOrderByTokenUseCase(
+        approval_token_service,
+        apply_decision_use_case,
+    )
+    try:
+        updated_status = await use_case.execute(id, request.token)
     except InvalidApprovalTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

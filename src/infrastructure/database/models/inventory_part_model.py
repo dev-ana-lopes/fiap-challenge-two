@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, Numeric, String, UUID, func
+from sqlalchemy import UUID, Column, DateTime, Integer, Numeric, String, func
 
 from .base import Base
 
@@ -11,5 +11,6 @@ class InventoryPartModel(Base):
     unit_price = Column(Numeric(10, 2), nullable=False)
     stock_quantity = Column(Integer(), nullable=False, default=0)
     created_at = Column(DateTime, default=func.now(), nullable=False)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
-
+    updated_at = Column(
+        DateTime, default=func.now(), onupdate=func.now(), nullable=False
+    )

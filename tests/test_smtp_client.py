@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import pytest
 from email import message_from_bytes
 from email.policy import default
 
+import pytest
+
+from src.domain.services import ApprovalRequestEmailMessage
 from src.infrastructure.config.settings import Settings
 from src.infrastructure.email.smtp_client import SmtpEmailSender
-from src.domain.services import ApprovalRequestEmailMessage
 
 
 class _FakeSmtp:
@@ -80,7 +81,7 @@ async def test_smtp_sender_can_skip_tls_and_auth(monkeypatch):
     client = created["client"]
     assert client.host == "mailhog"
     assert client.port == 1025
-    assert client.timeout is None
+    assert client.timeout == 10
     assert client.ehlo_calls == 1
     assert client.starttls_called is False
     assert client.login_called is False
@@ -137,10 +138,10 @@ async def test_smtp_sender_builds_approval_request_email(monkeypatch):
     assert "Servico: Revisao - R$ 100.00" in body
     assert "Peca: Filtro x1 - R$ 50.50" in body
     assert (
-        "https://api.example.com/public/service-orders/so-123/approval?token=approve-token"
-        in body
+        "https://api.example.com/public/service-orders/so-123/"
+        "approval?token=approve-token" in body
     )
     assert (
-        "https://api.example.com/public/service-orders/so-123/approval?token=reject-token"
-        in body
+        "https://api.example.com/public/service-orders/so-123/"
+        "approval?token=reject-token" in body
     )

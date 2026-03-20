@@ -7,11 +7,15 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       APP_BASE_URL: ${APP_BASE_URL}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_USE_TLS: ${SMTP_USE_TLS}
       SMTP_USE_AUTH: ${SMTP_USE_AUTH}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
       APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET}
       APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES}
@@ -36,11 +40,15 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       APP_BASE_URL: ${APP_BASE_URL}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_USE_TLS: ${SMTP_USE_TLS}
       SMTP_USE_AUTH: ${SMTP_USE_AUTH}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
       APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET}
       APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES}
@@ -61,7 +69,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

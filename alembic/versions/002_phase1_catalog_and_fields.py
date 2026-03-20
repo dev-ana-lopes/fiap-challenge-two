@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "002_phase1_catalog_and_fields"
-down_revision = "001_initial"
+revision = "55ff6e9305214157b1bfd6b7ef6f0f1b"
+down_revision = "d40d7727d25c4ce7b6f5fd8d4ef0ff4a"
 branch_labels = None
 depends_on = None
 
@@ -55,4 +55,3 @@ def downgrade() -> None:
     op.drop_column("service_orders", "started_at")
     op.drop_constraint("uq_customers_cpf_cnpj", "customers", type_="unique")
     op.drop_column("customers", "cpf_cnpj")
-

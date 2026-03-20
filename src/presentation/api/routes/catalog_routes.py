@@ -8,6 +8,8 @@ from ....application.use_cases.catalog_use_cases import (
     CreateInventoryPartUseCase,
     DeleteCatalogServiceUseCase,
     DeleteInventoryPartUseCase,
+    GetCatalogServiceUseCase,
+    GetInventoryPartUseCase,
     ListCatalogServicesUseCase,
     ListInventoryPartsUseCase,
     UpdateCatalogServiceUseCase,
@@ -47,13 +49,30 @@ async def create_catalog_service(
 
 
 @router.get("/services")
-async def list_catalog_services(repo: CatalogServiceRepo) -> list[CatalogServiceResponse]:
+async def list_catalog_services(
+    repo: CatalogServiceRepo,
+) -> list[CatalogServiceResponse]:
     use_case = ListCatalogServicesUseCase(repo)
     services = await use_case.execute()
     return [
         CatalogServiceResponse(id=str(s.id), description=s.description, price=s.price)
         for s in services
     ]
+
+
+@router.get("/services/{service_id}")
+async def get_catalog_service(
+    service_id: UUID, repo: CatalogServiceRepo
+) -> CatalogServiceResponse:
+    use_case = GetCatalogServiceUseCase(repo)
+    service = await use_case.execute(service_id)
+    if service is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return CatalogServiceResponse(
+        id=str(service.id),
+        description=service.description,
+        price=service.price,
+    )
 
 
 @router.put("/services/{service_id}")
@@ -105,6 +124,22 @@ async def list_inventory_parts(repo: InventoryPartRepo) -> list[InventoryPartRes
     ]
 
 
+@router.get("/parts/{part_id}")
+async def get_inventory_part(
+    part_id: UUID, repo: InventoryPartRepo
+) -> InventoryPartResponse:
+    use_case = GetInventoryPartUseCase(repo)
+    part = await use_case.execute(part_id)
+    if part is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return InventoryPartResponse(
+        id=str(part.id),
+        name=part.name,
+        unit_price=part.unit_price,
+        stock_quantity=part.stock_quantity,
+    )
+
+
 @router.put("/parts/{part_id}")
 async def update_inventory_part(
     part_id: UUID, request: InventoryPartUpdateRequest, repo: InventoryPartRepo
@@ -128,4 +163,3 @@ async def delete_inventory_part(part_id: UUID, repo: InventoryPartRepo) -> dict:
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return {"success": True}
-

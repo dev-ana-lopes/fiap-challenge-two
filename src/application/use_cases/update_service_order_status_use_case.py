@@ -4,6 +4,7 @@ from ...domain.enums import ServiceOrderStatus
 from ...domain.errors import ServiceOrderNotFoundError
 from ...domain.repositories import CustomerRepository, ServiceOrderRepository
 from ...domain.services import ApprovalTokenService, EmailSender
+from ...domain.time import utcnow
 from .send_approval_request_email_use_case import SendApprovalRequestEmailUseCase
 
 
@@ -34,12 +35,8 @@ class UpdateServiceOrderStatusUseCase:
         if service_order is None:
             raise ServiceOrderNotFoundError(service_order_id)
 
-        service_order.transition_to(status_enum)
-        await self.service_order_repo.update_status(service_order_id, status_enum)
-        if status_enum == ServiceOrderStatus.IN_PROGRESS:
-            await self.service_order_repo.set_started_at(service_order_id)
-        if status_enum == ServiceOrderStatus.FINISHED:
-            await self.service_order_repo.set_finished_at(service_order_id)
+        service_order.transition_to(status_enum, changed_at=utcnow())
+        await self.service_order_repo.update(service_order)
 
         customer = await self.customer_repo.get_by_id(service_order.customer_id)
         if customer is not None and status_enum == ServiceOrderStatus.WAITING_APPROVAL:

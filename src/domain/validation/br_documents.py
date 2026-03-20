@@ -62,4 +62,3 @@ def is_valid_br_plate(value: str) -> bool:
     if re.fullmatch(r"[A-Z]{3}[0-9][A-Z][0-9]{2}", plate):
         return True
     return False
-

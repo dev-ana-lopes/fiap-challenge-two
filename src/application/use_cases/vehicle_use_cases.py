@@ -1,8 +1,8 @@
-from datetime import datetime
 from uuid import UUID, uuid4
 
 from ...domain.entities import Vehicle
 from ...domain.repositories import CustomerRepository, VehicleRepository
+from ...domain.time import utcnow
 
 
 class CreateVehicleUseCase:
@@ -28,7 +28,7 @@ class CreateVehicleUseCase:
         existing = await self.vehicle_repo.get_by_plate(plate)
         if existing is not None:
             raise ValueError("Vehicle plate already registered")
-        now = datetime.utcnow()
+        now = utcnow()
         vehicle = Vehicle(
             id=uuid4(),
             customer_id=customer_id,
@@ -77,7 +77,7 @@ class UpdateVehicleUseCase:
         existing.model = model
         existing.year = year
         existing.plate = plate
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utcnow()
         await self.vehicle_repo.update(existing)
         return True
 

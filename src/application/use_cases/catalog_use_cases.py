@@ -1,8 +1,8 @@
-from datetime import datetime
 from uuid import UUID, uuid4
 
 from ...domain.entities import CatalogService, InventoryPart
 from ...domain.repositories import CatalogServiceRepository, InventoryPartRepository
+from ...domain.time import utcnow
 
 
 class CreateCatalogServiceUseCase:
@@ -10,7 +10,7 @@ class CreateCatalogServiceUseCase:
         self.repo = repo
 
     async def execute(self, description: str, price: float) -> str:
-        now = datetime.utcnow()
+        now = utcnow()
         service = CatalogService(
             id=uuid4(),
             description=description,
@@ -32,7 +32,7 @@ class UpdateCatalogServiceUseCase:
             return False
         existing.description = description
         existing.price = price
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utcnow()
         await self.repo.update(existing)
         return True
 
@@ -53,12 +53,20 @@ class ListCatalogServicesUseCase:
         return await self.repo.list()
 
 
+class GetCatalogServiceUseCase:
+    def __init__(self, repo: CatalogServiceRepository):
+        self.repo = repo
+
+    async def execute(self, service_id: UUID) -> CatalogService | None:
+        return await self.repo.get_by_id(service_id)
+
+
 class CreateInventoryPartUseCase:
     def __init__(self, repo: InventoryPartRepository):
         self.repo = repo
 
     async def execute(self, name: str, unit_price: float, stock_quantity: int) -> str:
-        now = datetime.utcnow()
+        now = utcnow()
         existing = await self.repo.get_by_name(name)
         if existing is not None:
             raise ValueError("Part name already registered")
@@ -91,7 +99,7 @@ class UpdateInventoryPartUseCase:
         existing.name = name
         existing.unit_price = unit_price
         existing.stock_quantity = stock_quantity
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utcnow()
         await self.repo.update(existing)
         return True
 
@@ -111,3 +119,10 @@ class ListInventoryPartsUseCase:
     async def execute(self) -> list[InventoryPart]:
         return await self.repo.list()
 
+
+class GetInventoryPartUseCase:
+    def __init__(self, repo: InventoryPartRepository):
+        self.repo = repo
+
+    async def execute(self, part_id: UUID) -> InventoryPart | None:
+        return await self.repo.get_by_id(part_id)

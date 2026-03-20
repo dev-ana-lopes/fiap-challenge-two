@@ -1,8 +1,8 @@
-from datetime import datetime
 from uuid import UUID, uuid4
 
 from ...domain.entities import Customer
 from ...domain.repositories import CustomerRepository
+from ...domain.time import utcnow
 
 
 class CreateCustomerUseCase:
@@ -12,7 +12,7 @@ class CreateCustomerUseCase:
     async def execute(
         self, name: str, cpf_cnpj: str | None, email: str, phone: str
     ) -> str:
-        now = datetime.utcnow()
+        now = utcnow()
         if cpf_cnpj:
             existing = await self.customer_repo.get_by_cpf_cnpj(cpf_cnpj)
             if existing is not None:
@@ -59,7 +59,7 @@ class UpdateCustomerUseCase:
         existing.cpf_cnpj = cpf_cnpj
         existing.email = email
         existing.phone = phone
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utcnow()
         await self.customer_repo.update(existing)
         return True
 
@@ -86,4 +86,3 @@ class ListCustomersUseCase:
 
     async def execute(self) -> list[Customer]:
         return await self.customer_repo.list()
-

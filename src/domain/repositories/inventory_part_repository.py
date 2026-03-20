@@ -32,4 +32,3 @@ class InventoryPartRepository(ABC):
     @abstractmethod
     async def decrease_stock(self, part_id: UUID, quantity: int) -> bool:
         pass
-

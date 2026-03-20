@@ -1,6 +1,6 @@
 import logging
-import ssl
 import smtplib
+import ssl
 from asyncio import to_thread
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -44,11 +44,17 @@ class SmtpEmailSender(EmailSender):
         with smtplib.SMTP(
             self.settings.SMTP_HOST,
             self.settings.SMTP_PORT,
+            timeout=self.settings.SMTP_TIMEOUT_SECONDS,
         ) as server:
             server.ehlo()
             if self.settings.SMTP_USE_TLS:
                 server.starttls(context=ssl.create_default_context())
                 server.ehlo()
+            if self.settings.SMTP_USE_AUTH and self.settings.SMTP_USERNAME:
+                server.login(
+                    self.settings.SMTP_USERNAME,
+                    self.settings.SMTP_PASSWORD,
+                )
             server.send_message(message)
 
     async def send_email(

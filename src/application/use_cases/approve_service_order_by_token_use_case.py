@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from ...domain.errors import ApprovalTokenMismatchError
 from ...domain.enums import ServiceOrderStatus
+from ...domain.errors import ApprovalTokenMismatchError
 from ...domain.services import ApprovalTokenService
 from .apply_service_order_approval_decision_use_case import (
     ApplyServiceOrderApprovalDecisionUseCase,

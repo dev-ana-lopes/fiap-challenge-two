@@ -24,7 +24,8 @@ class InvalidServiceOrderTransitionError(DomainError):
         self.current_status = current_status
         self.target_status = target_status
         super().__init__(
-            f"Cannot transition service order from {current_status.value} to {target_status.value}"
+            "Cannot transition service order from "
+            f"{current_status.value} to {target_status.value}"
         )
 
 

@@ -5,7 +5,6 @@ from ..entities import User
 
 
 class UserRepository(ABC):
-
     @abstractmethod
     async def save(self, user: User) -> None:
         pass

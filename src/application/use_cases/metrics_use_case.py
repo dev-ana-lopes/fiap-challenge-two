@@ -7,4 +7,3 @@ class GetAverageExecutionTimeUseCase:
 
     async def execute(self) -> float | None:
         return await self.service_order_repo.get_average_execution_time_seconds()
-

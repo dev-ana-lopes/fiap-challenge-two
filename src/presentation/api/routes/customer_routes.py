@@ -104,4 +104,3 @@ async def delete_customer(customer_id: UUID, customer_repo: CustomerRepo) -> dic
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return {"success": True}
-

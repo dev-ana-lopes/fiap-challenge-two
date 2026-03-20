@@ -1,26 +1,20 @@
 import logging
-from datetime import datetime
 from uuid import UUID, uuid4
 
-from ..dto.create_service_order_dto import CreateServiceOrderDTO
-from ...domain.entities import (
-    Customer,
-    PartItem,
-    ServiceItem,
-    ServiceOrder,
-    Vehicle,
-)
+from ...domain.entities import Customer, PartItem, ServiceItem, ServiceOrder, Vehicle
 from ...domain.enums import ServiceOrderStatus
 from ...domain.repositories import (
-    CustomerRepository,
     CatalogServiceRepository,
+    CustomerRepository,
     InventoryPartRepository,
-    VehicleRepository,
-    ServiceOrderRepository,
-    ServiceItemRepository,
     PartItemRepository,
+    ServiceItemRepository,
+    ServiceOrderRepository,
+    VehicleRepository,
 )
 from ...domain.services import ApprovalTokenService, EmailSender
+from ...domain.time import utcnow
+from ..dto.create_service_order_dto import CreateServiceOrderDTO
 from .send_approval_request_email_use_case import SendApprovalRequestEmailUseCase
 
 logger = logging.getLogger(__name__)
@@ -52,55 +46,9 @@ class CreateServiceOrderUseCase:
         )
 
     async def execute(self, dto: CreateServiceOrderDTO) -> str:
-        now = datetime.utcnow()
-        customer = None
-        if dto.customer_cpf_cnpj:
-            customer = await self.customer_repo.get_by_cpf_cnpj(dto.customer_cpf_cnpj)
-        if customer is None:
-            customer = await self.customer_repo.get_by_email(dto.customer_email)
-
-        if customer is None:
-            customer_id = uuid4()
-            customer = Customer(
-                id=customer_id,
-                name=dto.customer_name,
-                cpf_cnpj=dto.customer_cpf_cnpj,
-                email=dto.customer_email,
-                phone=dto.customer_phone,
-                created_at=now,
-                updated_at=now,
-            )
-            await self.customer_repo.save(customer)
-        else:
-            customer.name = dto.customer_name
-            customer.email = dto.customer_email
-            customer.phone = dto.customer_phone
-            customer.cpf_cnpj = dto.customer_cpf_cnpj or customer.cpf_cnpj
-            customer.updated_at = now
-            await self.customer_repo.update(customer)
-
-        vehicle = await self.vehicle_repo.get_by_plate(dto.vehicle_plate)
-        if vehicle is None:
-            vehicle_id = uuid4()
-            vehicle = Vehicle(
-                id=vehicle_id,
-                customer_id=customer.id,
-                brand=dto.vehicle_brand,
-                model=dto.vehicle_model,
-                year=dto.vehicle_year,
-                plate=dto.vehicle_plate,
-                created_at=now,
-                updated_at=now,
-            )
-            await self.vehicle_repo.save(vehicle)
-        else:
-            vehicle.customer_id = customer.id
-            vehicle.brand = dto.vehicle_brand
-            vehicle.model = dto.vehicle_model
-            vehicle.year = dto.vehicle_year
-            vehicle.plate = dto.vehicle_plate
-            vehicle.updated_at = now
-            await self.vehicle_repo.update(vehicle)
+        now = utcnow()
+        customer = await self._resolve_customer(dto, now)
+        vehicle = await self._resolve_vehicle(dto, customer.id, now)
 
         service_order_id = uuid4()
         service_items: list[ServiceItem] = []
@@ -193,3 +141,93 @@ class CreateServiceOrderUseCase:
             )
 
         return str(service_order_id)
+
+    async def _resolve_customer(
+        self,
+        dto: CreateServiceOrderDTO,
+        now,
+    ) -> Customer:
+        if dto.customer_id:
+            customer = await self.customer_repo.get_by_id(UUID(dto.customer_id))
+            if customer is None:
+                raise LookupError("Customer not found")
+            return customer
+
+        if not all([dto.customer_name, dto.customer_email, dto.customer_phone]):
+            raise ValueError(
+                "customer_id or customer_name/customer_email/"
+                "customer_phone must be provided"
+            )
+
+        customer = None
+        if dto.customer_cpf_cnpj:
+            customer = await self.customer_repo.get_by_cpf_cnpj(dto.customer_cpf_cnpj)
+        if customer is None and dto.customer_email:
+            customer = await self.customer_repo.get_by_email(dto.customer_email)
+
+        if customer is None:
+            customer = Customer(
+                id=uuid4(),
+                name=dto.customer_name,
+                cpf_cnpj=dto.customer_cpf_cnpj,
+                email=dto.customer_email,
+                phone=dto.customer_phone,
+                created_at=now,
+                updated_at=now,
+            )
+            await self.customer_repo.save(customer)
+            return customer
+
+        customer.name = dto.customer_name
+        customer.email = dto.customer_email
+        customer.phone = dto.customer_phone
+        customer.cpf_cnpj = dto.customer_cpf_cnpj or customer.cpf_cnpj
+        customer.updated_at = now
+        await self.customer_repo.update(customer)
+        return customer
+
+    async def _resolve_vehicle(
+        self,
+        dto: CreateServiceOrderDTO,
+        customer_id: UUID,
+        now,
+    ) -> Vehicle:
+        if dto.vehicle_id:
+            vehicle = await self.vehicle_repo.get_by_id(UUID(dto.vehicle_id))
+            if vehicle is None:
+                raise LookupError("Vehicle not found")
+            if vehicle.customer_id != customer_id:
+                raise ValueError("Vehicle does not belong to the informed customer")
+            return vehicle
+
+        if not all(
+            [dto.vehicle_brand, dto.vehicle_model, dto.vehicle_year, dto.vehicle_plate]
+        ):
+            raise ValueError(
+                "vehicle_id or vehicle_brand/vehicle_model/"
+                "vehicle_year/vehicle_plate must be provided"
+            )
+
+        vehicle = await self.vehicle_repo.get_by_plate(dto.vehicle_plate)
+        if vehicle is None:
+            vehicle = Vehicle(
+                id=uuid4(),
+                customer_id=customer_id,
+                brand=dto.vehicle_brand,
+                model=dto.vehicle_model,
+                year=dto.vehicle_year,
+                plate=dto.vehicle_plate,
+                created_at=now,
+                updated_at=now,
+            )
+            await self.vehicle_repo.save(vehicle)
+            return vehicle
+
+        vehicle.customer_id = customer_id
+        vehicle.brand = dto.vehicle_brand
+        vehicle.model = dto.vehicle_model
+        vehicle.year = dto.vehicle_year
+        vehicle.plate = dto.vehicle_plate
+        vehicle.updated_at = now
+        await self.vehicle_repo.update(vehicle)
+        return vehicle

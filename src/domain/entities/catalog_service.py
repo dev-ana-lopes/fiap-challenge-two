@@ -10,4 +10,3 @@ class CatalogService:
     price: float
     created_at: datetime
     updated_at: datetime
-

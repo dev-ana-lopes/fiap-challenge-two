@@ -1,5 +1,5 @@
-from .customer_repository import CustomerRepository
 from .catalog_service_repository import CatalogServiceRepository
+from .customer_repository import CustomerRepository
 from .inventory_part_repository import InventoryPartRepository
 from .part_item_repository import PartItemRepository
 from .service_item_repository import ServiceItemRepository

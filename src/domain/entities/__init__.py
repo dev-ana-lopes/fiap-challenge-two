@@ -1,5 +1,5 @@
-from .customer import Customer
 from .catalog_service import CatalogService
+from .customer import Customer
 from .inventory_part import InventoryPart
 from .part_item import PartItem
 from .service_item import ServiceItem

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Numeric, String, UUID, func
+from sqlalchemy import UUID, Column, DateTime, Numeric, String, func
 
 from .base import Base
 
@@ -10,5 +10,6 @@ class CatalogServiceModel(Base):
     description = Column(String(500), nullable=False, unique=True)
     price = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
-
+    updated_at = Column(
+        DateTime, default=func.now(), onupdate=func.now(), nullable=False
+    )

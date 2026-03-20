@@ -4,14 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.service_item import ServiceItem
-from src.domain.repositories.service_item_repository import (
-    ServiceItemRepository)
+from src.domain.repositories.service_item_repository import ServiceItemRepository
 
 from ..models.service_item_model import ServiceItemModel
 
 
 class PostgresServiceItemRepository(ServiceItemRepository):
-
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -40,9 +38,7 @@ class PostgresServiceItemRepository(ServiceItemRepository):
         self.session.add_all(models)
         await self.session.commit()
 
-    async def get_by_service_order_id(
-        self, service_order_id: UUID
-    ) -> list[ServiceItem]:
+    async def get_by_service_order_id(self, service_order_id: UUID) -> list[ServiceItem]:
         query = select(ServiceItemModel).where(
             ServiceItemModel.service_order_id == service_order_id
         )
