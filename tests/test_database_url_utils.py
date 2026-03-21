@@ -40,9 +40,11 @@ def test_describe_database_target_extracts_host_port_and_database():
 
 
 def test_validate_runtime_database_url_accepts_real_hosts():
-    assert validate_runtime_database_url(
-        "postgresql+asyncpg://user:pass@service-order-db.abc123.sa-east-1.rds.amazonaws.com:5432/service_order_db"
-    ) == (
+    database_url = (
+        "postgresql+asyncpg://user:pass@service-order-db.abc123.sa-east-1."
+        "rds.amazonaws.com:5432/service_order_db"
+    )
+    assert validate_runtime_database_url(database_url) == (
         "service-order-db.abc123.sa-east-1.rds.amazonaws.com",
         5432,
         "service_order_db",

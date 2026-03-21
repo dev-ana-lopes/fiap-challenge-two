@@ -41,12 +41,19 @@ def init_database(settings: Settings) -> None:
     database_session = DatabaseSession(settings)
 
 
+def get_database_session(
+    settings: Settings = Depends(get_settings),
+) -> DatabaseSession:
+    if database_session is None:
+        init_database(settings)
+    return database_session
+
+
 async def get_session(
     settings: Settings = Depends(get_settings),
 ) -> AsyncSession:
-    if database_session is None:
-        init_database(settings)
-    async for session in database_session.get_session():
+    db_session = get_database_session(settings)
+    async for session in db_session.get_session():
         yield session
 
 

@@ -28,6 +28,7 @@ from tests.support import (
     create_test_app,
 )
 from tests.support.testmail import (
+    build_live_test_settings,
     build_testmail_recipient,
     extract_links,
     first_matching_link,
@@ -56,7 +57,7 @@ def _create_service_order_payload(customer_email: str) -> dict:
 @pytest.mark.testmail
 @pytest.mark.e2e
 async def test_service_order_email_approval_flow_with_testmail_live():
-    settings = Settings()
+    settings = build_live_test_settings()
     if not is_testmail_live_enabled(settings):
         pytest.skip(
             "Testmail live test requires TESTMAIL_ENABLED=true, "

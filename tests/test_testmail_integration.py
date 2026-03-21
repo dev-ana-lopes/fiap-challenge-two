@@ -4,9 +4,9 @@ from uuid import uuid4
 
 import pytest
 
-from src.infrastructure.config.settings import Settings
 from src.infrastructure.email.smtp_client import SmtpEmailSender
 from tests.support.testmail import (
+    build_live_test_settings,
     build_testmail_recipient,
     is_testmail_live_enabled,
     message_recipients,
@@ -19,7 +19,7 @@ from tests.support.testmail import (
 @pytest.mark.integration
 @pytest.mark.testmail
 async def test_smtp_sender_delivers_message_to_testmail_live():
-    settings = Settings()
+    settings = build_live_test_settings()
     if not is_testmail_live_enabled(settings):
         pytest.skip(
             "Testmail live test requires TESTMAIL_ENABLED=true, "
