@@ -28,7 +28,7 @@ services:
         condition: service_healthy
     networks:
       - service-order-network
-    command: ["poetry", "run", "alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
+    command: ["alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
 
   api:
     build:
