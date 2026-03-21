@@ -1,64 +1,41 @@
 services:
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${API_IMAGE:?API_IMAGE must point to the published ECR image}
+    pull_policy: always
     container_name: service-order-migrate-prod
     restart: "no"
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
+    environment: &api_environment
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      APP_BASE_URL: ${APP_BASE_URL}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_USE_TLS: ${SMTP_USE_TLS}
-      SMTP_USE_AUTH: ${SMTP_USE_AUTH}
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      SMTP_USE_AUTH: ${SMTP_USE_AUTH:-false}
       SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
-      APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET}
-      APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET:?APPROVAL_TOKEN_SECRET is required}
+      APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES:-60}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
       MIGRATE_ON_STARTUP: "false"
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - service-order-network
     command: ["alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${API_IMAGE:?API_IMAGE must point to the published ECR image}
+    pull_policy: always
     container_name: service-order-api-prod
     restart: always
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
-      APP_BASE_URL: ${APP_BASE_URL}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_USE_TLS: ${SMTP_USE_TLS}
-      SMTP_USE_AUTH: ${SMTP_USE_AUTH}
-      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
-      APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET}
-      APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
-      MIGRATE_ON_STARTUP: "false"
+      <<: *api_environment
     depends_on:
-      postgres:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     networks:
@@ -74,35 +51,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: service-order-postgres-prod
-    restart: always
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-service_order_db}
-      POSTGRES_USER: ${POSTGRES_USER:-service_order_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-service_order_password}
-    ports:
-      - "5432:5432"
-    networks:
-      - service-order-network
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-service_order_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   service-order-network:

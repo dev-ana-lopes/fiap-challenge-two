@@ -3,24 +3,47 @@ set -eu
 
 should_migrate="${MIGRATE_ON_STARTUP:-true}"
 
-if [ "$should_migrate" != "false" ]; then
 python - <<'PY'
 import os
-from urllib.parse import urlsplit
+import socket
+import sys
 
-database_url = os.environ.get("DATABASE_URL", "")
-if database_url:
-    parsed = urlsplit(database_url)
-    host = parsed.hostname or "<unknown>"
-    port = parsed.port or 5432
-    database = parsed.path.lstrip("/") or "<unknown>"
+from src.infrastructure.database.url_utils import validate_runtime_database_url
+
+
+database_url = os.environ.get("DATABASE_URL", "").strip()
+
+try:
+    host, port, database = validate_runtime_database_url(database_url)
+except ValueError as exc:
+    print(f"[entrypoint] {exc}", flush=True)
+    sys.exit(1)
+
+print(
+    f"[entrypoint] Database target host={host} port={port} db={database}",
+    flush=True,
+)
+
+try:
+    resolved = sorted(
+        {
+            result[4][0]
+            for result in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        }
+    )
+except OSError as exc:
     print(
-        f"[entrypoint] Database target host={host} port={port} db={database}",
+        f"[entrypoint] Database host resolution failed for host={host}: {exc}",
         flush=True,
     )
 else:
-    print("[entrypoint] DATABASE_URL is not set.", flush=True)
+    print(
+        f"[entrypoint] Database host resolved to: {', '.join(resolved)}",
+        flush=True,
+    )
 PY
+
+if [ "$should_migrate" != "false" ]; then
   echo "[entrypoint] Running migrations (alembic upgrade head)..."
   attempts="${MIGRATE_MAX_ATTEMPTS:-30}"
   sleep_seconds="${MIGRATE_RETRY_SLEEP_SECONDS:-2}"
