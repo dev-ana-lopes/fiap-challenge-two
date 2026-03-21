@@ -1,6 +1,5 @@
 from urllib.parse import urlsplit
 
-
 PLACEHOLDER_DATABASE_HOSTS = {
     "seu_host_postgres",
     "your-rds-endpoint",

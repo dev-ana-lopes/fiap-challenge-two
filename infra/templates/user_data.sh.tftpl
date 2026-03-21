@@ -1,0 +1,19 @@
+#!/bin/bash
+set -eux
+
+dnf update -y
+dnf install -y docker git
+systemctl enable docker
+systemctl start docker
+
+if ! docker compose version >/dev/null 2>&1; then
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -SL \
+    "https://github.com/docker/compose/releases/download/${docker_compose_version}/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+
+usermod -aG docker ec2-user
+mkdir -p ${app_dir}
+chown -R ec2-user:ec2-user ${app_dir}

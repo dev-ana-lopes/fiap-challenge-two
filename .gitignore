@@ -67,5 +67,8 @@ ehthumbs.db
 
 # === Docker / local volumes ===
 *.pid
+secrets/
+.secrets/
+/tmp/
 
 tech_challenge_extracted.txt

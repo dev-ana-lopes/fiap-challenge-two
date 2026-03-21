@@ -1,83 +1,143 @@
 variable "aws_region" {
   type        = string
-  description = "AWS region for the infrastructure."
-  default     = "us-east-1"
+  description = "Regiao AWS."
+  default     = "sa-east-1"
 }
 
 variable "project_name" {
   type        = string
-  description = "Base name applied to AWS resources."
+  description = "Prefixo aplicado aos recursos."
   default     = "service-order-api"
 }
 
-variable "cluster_name" {
-  type        = string
-  description = "EKS cluster name."
-  default     = "service-order-eks"
+variable "create_vpc" {
+  type        = bool
+  description = "Quando true, cria VPC e subnets. Quando false, reutiliza IDs existentes."
+  default     = true
 }
 
-variable "kubernetes_version" {
+variable "existing_vpc_id" {
   type        = string
-  description = "EKS Kubernetes version."
-  default     = "1.31"
+  description = "ID da VPC existente quando create_vpc=false."
+  default     = ""
+}
+
+variable "existing_public_subnet_id" {
+  type        = string
+  description = "Subnet publica existente quando create_vpc=false."
+  default     = ""
+}
+
+variable "existing_private_subnet_ids" {
+  type        = list(string)
+  description = "Subnets privadas existentes quando create_vpc=false."
+  default     = []
+}
+
+variable "availability_zones" {
+  type        = list(string)
+  description = "Availability zones usadas quando create_vpc=true."
+  default     = []
 }
 
 variable "vpc_cidr" {
   type        = string
-  description = "CIDR block for the VPC."
+  description = "CIDR da VPC."
   default     = "10.40.0.0/16"
 }
 
-variable "node_instance_types" {
+variable "public_subnet_cidr" {
+  type        = string
+  description = "CIDR da subnet publica."
+  default     = "10.40.1.0/24"
+}
+
+variable "private_subnet_cidrs" {
   type        = list(string)
-  description = "EC2 instance types for the managed node group."
-  default     = ["t3.medium"]
+  description = "CIDRs das subnets privadas."
+  default     = ["10.40.11.0/24", "10.40.12.0/24"]
 }
 
-variable "node_desired_size" {
-  type        = number
-  description = "Desired number of worker nodes."
-  default     = 2
+variable "allowed_ssh_cidrs" {
+  type        = list(string)
+  description = "Origem permitida para SSH."
+  default     = ["0.0.0.0/0"]
 }
 
-variable "node_min_size" {
-  type        = number
-  description = "Minimum number of worker nodes."
-  default     = 1
+variable "app_ingress_cidrs" {
+  type        = list(string)
+  description = "Origem permitida para a API HTTP."
+  default     = ["0.0.0.0/0"]
 }
 
-variable "node_max_size" {
-  type        = number
-  description = "Maximum number of worker nodes."
-  default     = 4
+variable "ec2_instance_type" {
+  type        = string
+  description = "Tipo da instância EC2."
+  default     = "t3.micro"
+}
+
+variable "ec2_key_name" {
+  type        = string
+  description = "Key pair da EC2."
+  default     = ""
+}
+
+variable "ec2_ami_id" {
+  type        = string
+  description = "AMI customizada opcional."
+  default     = ""
+}
+
+variable "allocate_eip" {
+  type        = bool
+  description = "Aloca Elastic IP para a EC2."
+  default     = true
+}
+
+variable "app_directory" {
+  type        = string
+  description = "Diretorio da aplicação na EC2."
+  default     = "/opt/service-order-api"
+}
+
+variable "docker_compose_version" {
+  type        = string
+  description = "Versao do Docker Compose plugin instalada no bootstrap."
+  default     = "v2.27.0"
 }
 
 variable "db_name" {
   type        = string
-  description = "RDS PostgreSQL database name."
+  description = "Nome do banco PostgreSQL."
   default     = "service_order_db"
 }
 
 variable "db_username" {
   type        = string
-  description = "RDS PostgreSQL username."
+  description = "Usuario do banco."
   default     = "service_order_user"
 }
 
 variable "db_password" {
   type        = string
-  description = "RDS PostgreSQL password."
+  description = "Senha do banco."
   sensitive   = true
 }
 
 variable "db_instance_class" {
   type        = string
-  description = "RDS instance class."
+  description = "Classe do RDS."
   default     = "db.t4g.micro"
 }
 
 variable "db_allocated_storage" {
   type        = number
-  description = "Allocated storage in GB for the RDS instance."
+  description = "Armazenamento do RDS em GB."
   default     = 20
+}
+
+variable "db_engine_version" {
+  type        = string
+  description = "Versao do PostgreSQL."
+  default     = "16.3"
 }

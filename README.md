@@ -1,55 +1,147 @@
 # Tech Challenge Workshop Service Orders API
 
-API backend monolítica em FastAPI para gestão de ordens de serviço de oficina mecânica. A solução cobre clientes, veículos, catálogo de serviços, peças/insumos, orçamento, aprovação por email, evolução de status da OS, métricas, containers, Kubernetes, Terraform e pipeline CI/CD.
+Backend monolítico em FastAPI para gestão de ordens de serviço de oficina mecânica, organizado em Clean Architecture e preparado para execução local com Docker Compose.
 
-## Objetivos das Fases 1 e 2
+## Stack
 
-- Fase 1: autenticação JWT, validações brasileiras, CRUDs administrativos, abertura e acompanhamento de OS, orçamento automático, email e testes.
-- Fase 2: refatoração com Clean Architecture, fluxo de aprovação externa, listagem ativa com ordenação por prioridade, artefatos de deploy e documentação final.
+- Python 3.12
+- FastAPI
+- PostgreSQL
+- SQLAlchemy 2 + Alembic
+- SMTP (MailHog no local)
+- Docker Compose
+- GitHub Actions
+- Terraform para `EC2 + RDS`
 
 ## Arquitetura
 
-Visão em camadas:
+Camadas principais:
 
-- `src/domain`: entidades, enums, validações, erros e contratos.
-- `src/application`: casos de uso e DTOs.
-- `src/infrastructure`: PostgreSQL/Alembic, SMTP, JWT, configurações.
-- `src/presentation`: rotas FastAPI, dependências HTTP e schemas.
+- `src/domain`: entidades, enums, contratos e regras de negócio
+- `src/application`: casos de uso
+- `src/infrastructure`: banco, email, JWT, logging e settings
+- `src/presentation`: rotas HTTP, schemas e dependências
 
-Fluxo principal de OS:
+Agregado principal:
 
-1. autenticação administrativa via JWT;
-2. cadastro de cliente, veículo, serviço e peça;
-3. abertura da OS com `customer_id`, `vehicle_id`, `service_ids` e `part_refs`;
-4. cálculo automático do orçamento;
-5. envio de email com tokens de aprovação/reprovação;
-6. aprovação manual, por link de email ou por notificação externa;
-7. atualização de status e cálculo de tempo médio de execução.
+- `ServiceOrder`
 
-Mais detalhes em [docs/ARCHITECTURE.md](/c:/fiap-challenge-two/docs/ARCHITECTURE.md).
+Documentação complementar:
 
-## Componentes da solução
+- [README.deploy.md](/c:/fiap-challenge-two/README.deploy.md)
+- [solution-architecture.md](/c:/fiap-challenge-two/docs/architecture/solution-architecture.md)
+- [flows.md](/c:/fiap-challenge-two/docs/architecture/flows.md)
+- [ADR-001-arquitetura-e-estrategia-de-deploy.md](/c:/fiap-challenge-two/docs/adr/ADR-001-arquitetura-e-estrategia-de-deploy.md)
 
-- API FastAPI com Swagger/OpenAPI em `/docs`
-- PostgreSQL com Alembic
-- SMTP local com MailHog
-- Tokens JWT para autenticação administrativa
-- Tokens assinados para aprovação pública do orçamento
-- Dockerfile e `docker-compose`
-- manifests Kubernetes em [k8s](/c:/fiap-challenge-two/k8s)
-- Terraform em [infra](/c:/fiap-challenge-two/infra)
-- pipeline CI/CD em [.github/workflows/ci-cd.yml](/c:/fiap-challenge-two/.github/workflows/ci-cd.yml)
+## Pré-requisitos
 
-## Endpoints finais
+- Docker Desktop com Compose v2
+- Python 3.12
+- Poetry 1.7+
+- `make` opcional
 
-- `GET /health`
+## Variáveis de ambiente
+
+Crie o arquivo local a partir do exemplo:
+
+```bash
+cp .env.example .env
+```
+
+Principais variáveis:
+
+- `DATABASE_URL`
+- `APP_BASE_URL`
+- `JWT_SECRET`
+- `APPROVAL_TOKEN_SECRET`
+- `SMTP_HOST`
+- `SMTP_FROM_EMAIL`
+- `CORS_ALLOWED_ORIGINS`
+- `TRUSTED_HOSTS`
+
+O carregamento é validado em runtime. Em `staging/production`, o app rejeita:
+
+- segredos fracos ou placeholders
+- `SMTP_HOST=localhost/mailhog`
+- `CORS_ALLOWED_ORIGINS=*`
+- `APP_BASE_URL` de placeholder
+
+Também há suporte a `*_FILE` para segredos como `JWT_SECRET_FILE`, `APPROVAL_TOKEN_SECRET_FILE` e `SMTP_PASSWORD_FILE`.
+
+## Como subir com Make e Docker Compose
+
+Subida local:
+
+```bash
+make compose-up
+```
+
+Sem `make`:
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+Serviços:
+
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+- Readiness: `http://localhost:8000/health/ready`
+- MailHog: `http://localhost:8025`
+
+## Migrations
+
+Local:
+
+```bash
+make migrate
+```
+
+Container:
+
+```bash
+docker compose exec api alembic -c alembic/alembic.ini upgrade head
+```
+
+## Testes
+
+Suite padrão:
+
+```bash
+make test
+```
+
+Cobertura:
+
+```bash
+make test-cov
+```
+
+## Lint e formatação
+
+```bash
+make lint
+make format
+```
+
+## Swagger e APIs principais
+
+Autenticação:
+
 - `POST /auth/register`
 - `POST /auth/login`
 - `POST /auth/token`
+
+Cadastros administrativos:
+
 - `GET|POST|PUT|DELETE /customers`
 - `GET|POST|PUT|DELETE /vehicles`
 - `GET|POST|PUT|DELETE /catalog/services`
 - `GET|POST|PUT|DELETE /catalog/parts`
+
+Ordens de serviço:
+
 - `POST /service-orders`
 - `GET /service-orders`
 - `GET /service-orders/active`
@@ -57,228 +149,38 @@ Mais detalhes em [docs/ARCHITECTURE.md](/c:/fiap-challenge-two/docs/ARCHITECTURE
 - `GET /service-orders/{id}/status`
 - `PATCH /service-orders/{id}/status`
 - `POST /service-orders/{id}/approval`
+
+Endpoints públicos:
+
 - `GET /public/service-orders/{id}/status`
-- `GET /public/service-orders/{id}/approval?token=...`
+- `GET /public/service-orders/{id}/approval`
 - `POST /public/service-orders/{id}/approval`
-- `GET /metrics/average-execution-time`
 
-## Estrutura de pastas
+Operação:
 
-```text
-src/
-  application/
-  domain/
-  infrastructure/
-  presentation/
-alembic/
-docs/
-  postman/
-infra/
-k8s/
-tests/
-```
+- `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 
-## Banco e migrations
+## MailHog
 
-Banco escolhido: PostgreSQL.
+O ambiente local usa:
 
-Justificativa:
+- SMTP: `mailhog:1025`
+- UI: `http://localhost:8025`
 
-- aderente ao enunciado original;
-- bom suporte a integridade relacional para cliente, veículo, catálogo e OS;
-- compatível com Alembic, Docker Compose, RDS e EKS.
+Emails esperados:
 
-Executar migrations localmente:
+- solicitação de aprovação do orçamento
+- atualização de status da OS
 
-```bash
-poetry run alembic -c alembic/alembic.ini upgrade head
-```
+## Troubleshooting básico
 
-## Execução local
+- Se `/health/ready` retornar `503`, valide se o `postgres` está saudável.
+- Se o container da API reiniciar, confira `DATABASE_URL`, `JWT_SECRET` e `APPROVAL_TOKEN_SECRET`.
+- Se o email não sair no local, valide `SMTP_HOST=mailhog`, `SMTP_PORT=1025` e a UI do MailHog.
+- Se o Compose falhar com env faltando, compare seu arquivo com [.env.example](/c:/fiap-challenge-two/.env.example).
 
-Via Docker Compose:
+Troubleshooting detalhado:
 
-```bash
-cp .env.example .env
-docker compose up -d --build
-```
-
-URLs úteis:
-
-- Swagger: `http://localhost:8000/docs`
-- Healthcheck: `http://localhost:8000/health`
-- MailHog: `http://localhost:8025`
-
-Via Poetry:
-
-```bash
-poetry install
-poetry run uvicorn src.main:app --reload
-```
-
-## Variáveis de ambiente
-
-Principais variáveis:
-
-- `DATABASE_URL`
-- `ENVIRONMENT`
-- `APP_BASE_URL`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_FROM_EMAIL`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_USE_TLS`
-- `SMTP_USE_AUTH`
-- `SMTP_TIMEOUT_SECONDS`
-- `APPROVAL_TOKEN_SECRET`
-- `APPROVAL_TOKEN_TTL_MINUTES`
-- `JWT_SECRET`
-- `JWT_ALGORITHM`
-- `JWT_EXPIRATION_MINUTES`
-- `MIGRATE_ON_STARTUP`
-- `TESTMAIL_API_KEY`
-- `TESTMAIL_NAMESPACE`
-- `TESTMAIL_ENABLED`
-
-Referência completa em [.env.example](/c:/fiap-challenge-two/.env.example).
-
-## Email
-
-Fluxos cobertos:
-
-- envio do orçamento ao entrar em `WAITING_APPROVAL`;
-- envio de atualização de status para o cliente;
-- QA local com MailHog;
-- testes live opcionais com Testmail.
-
-Rodar com MailHog:
-
-```bash
-docker compose up -d mailhog
-```
-
-Habilitar Testmail:
-
-```bash
-TESTMAIL_ENABLED=true
-TESTMAIL_API_KEY=...
-TESTMAIL_NAMESPACE=...
-```
-
-Os testes live continuam opcionais. Em runtime a aplicação sempre envia por SMTP.
-
-## Testes
-
-Suite padrão:
-
-```bash
-poetry run pytest -q
-```
-
-Cobertura dos módulos críticos:
-
-```bash
-poetry run pytest --cov=src/application --cov=src/domain --cov=src/presentation/api/routes --cov=src/infrastructure/email --cov-report=term -m "not testmail"
-```
-
-Última medição obtida: `85%`.
-
-Checagens básicas:
-
-```bash
-poetry run black --check src tests
-poetry run isort --check-only src tests
-poetry run flake8 src tests
-```
-
-## Docker e Compose
-
-- [Dockerfile](/c:/fiap-challenge-two/Dockerfile): build multi-stage com healthcheck em `/health`
-- [docker-compose.yml](/c:/fiap-challenge-two/docker-compose.yml): stack local completa
-- [docker-compose.prod.yml](/c:/fiap-challenge-two/docker-compose.prod.yml): execução produtiva com job de migration separado
-
-## Kubernetes
-
-Manifestos disponíveis em [k8s](/c:/fiap-challenge-two/k8s):
-
-- [deployment.yaml](/c:/fiap-challenge-two/k8s/deployment.yaml)
-- [service.yaml](/c:/fiap-challenge-two/k8s/service.yaml)
-- [configmap.yaml](/c:/fiap-challenge-two/k8s/configmap.yaml)
-- [secret.yaml](/c:/fiap-challenge-two/k8s/secret.yaml)
-- [hpa.yaml](/c:/fiap-challenge-two/k8s/hpa.yaml)
-
-Deploy:
-
-```bash
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/hpa.yaml
-```
-
-## Terraform
-
-Provisionamento em [infra](/c:/fiap-challenge-two/infra):
-
-- VPC
-- EKS
-- RDS PostgreSQL
-
-Comandos:
-
-```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-## CI/CD
-
-Pipeline em [ci-cd.yml](/c:/fiap-challenge-two/.github/workflows/ci-cd.yml) com:
-
-- instalação das dependências;
-- lint;
-- testes com cobertura;
-- build da imagem Docker;
-- push para ECR;
-- `terraform apply`;
-- aplicação dos manifestos Kubernetes.
-
-## Postman
-
-- collection: [docs/postman/ServiceOrderAPI.postman_collection.json](/c:/fiap-challenge-two/docs/postman/ServiceOrderAPI.postman_collection.json)
-- environment local: [docs/postman/ServiceOrderAPI.local.postman_environment.json](/c:/fiap-challenge-two/docs/postman/ServiceOrderAPI.local.postman_environment.json)
-- instruções: [docs/postman/README.md](/c:/fiap-challenge-two/docs/postman/README.md)
-
-## Deploy na AWS — pré-requisitos e passos manuais
-
-As ações abaixo precisam ser feitas manualmente antes do deploy final:
-
-1. Criar repositório no Amazon ECR
-   criar o repositório da imagem;
-   registrar a URI;
-   configurar permissões de push/pull.
-2. Criar banco no Amazon RDS PostgreSQL
-   criar instância;
-   configurar database, usuário e senha;
-   ajustar security groups;
-   registrar endpoint e porta.
-3. Criar cluster no Amazon EKS
-   configurar VPC e subnets;
-   criar cluster;
-   criar node group;
-   validar acesso `kubectl`.
-4. Configurar email e segredos
-   configurar SMTP ou Amazon SES;
-   criar credenciais;
-   armazenar segredos;
-   configurar variáveis da aplicação.
-5. Expor a aplicação e conectar pipeline
-   configurar ingress/load balancer;
-   configurar DNS, se aplicável;
-   configurar credenciais do pipeline;
-   executar deploy inicial e validar healthcheck, docs, banco e email.
+- [troubleshooting.md](/c:/fiap-challenge-two/docs/runbooks/troubleshooting.md)

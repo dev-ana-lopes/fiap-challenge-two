@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: api
-          image: REPLACE_ME_IMAGE_URI
-          imagePullPolicy: Always
+          image: ${API_IMAGE}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           envFrom:
@@ -27,13 +27,13 @@ spec:
                 name: service-order-api-secret
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/live
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 15
