@@ -38,7 +38,7 @@ services:
     command: ["alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
 
   api:
-    image: ${API_IMAGE:-service-order-api:local}
+    image: ${API_IMAGE}
     container_name: service-order-api-prod
     init: true
     restart: unless-stopped
