@@ -48,6 +48,18 @@ Preencher obrigatoriamente:
 - `JWT_SECRET` ou `JWT_SECRET_FILE`
 - `APPROVAL_TOKEN_SECRET` ou `APPROVAL_TOKEN_SECRET_FILE`
 
+Formato aceito para listas:
+
+- `CORS_ALLOWED_ORIGINS=http://app.example.com,http://admin.example.com`
+- `TRUSTED_HOSTS=api.example.com,localhost`
+- ou JSON array, como `["http://app.example.com","http://admin.example.com"]`
+
+Validação local opcional antes do deploy:
+
+```bash
+python3 scripts/deploy/prepare_env.py .env.prod
+```
+
 ## Fluxo de deploy manual
 
 Build local na EC2:
@@ -97,6 +109,8 @@ Segredos esperados para deploy automatizado:
 - `EC2_USER`
 - `EC2_SSH_PRIVATE_KEY`
 - `APP_ENV_PROD`
+
+No deploy automatizado, o workflow renderiza `APP_ENV_PROD` em `.env.prod` e executa `scripts/deploy/prepare_env.py` para validar o arquivo e normalizar `CORS_ALLOWED_ORIGINS` e `TRUSTED_HOSTS` para JSON array antes do `docker compose`.
 
 ## Estratégia de segredos
 

@@ -52,6 +52,14 @@ Preencher:
 - SMTP real
 - segredos JWT e approval token
 
+`CORS_ALLOWED_ORIGINS` e `TRUSTED_HOSTS` podem ser informados em CSV ou JSON array. No GitHub Actions, `scripts/deploy/prepare_env.py` valida e normaliza esses campos antes do deploy.
+
+Para validar localmente antes do release:
+
+```bash
+python3 scripts/deploy/prepare_env.py .env.prod
+```
+
 ### 5. Publicar ou buildar imagem
 
 Opção A, build local:
