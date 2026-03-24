@@ -44,7 +44,7 @@ jobs:
   deploy-production:
     needs: validate
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, prod]
+    runs-on: [self-hosted, Linux, X64, prod]
     environment: production
 
     steps:
@@ -55,17 +55,18 @@ jobs:
         run: |
           mkdir -p "${{ env.APP_DIR }}"
 
-      - name: Render production env
-        run: |
-          printf '%s' "${{ secrets.APP_ENV_PROD }}" > "${{ env.APP_DIR }}/.env.prod"
-
       - name: Sync files to app dir
         run: |
           rsync -av --delete \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.venv' \
+            --exclude '.env.prod' \
             ./ "${{ env.APP_DIR }}/"
+
+      - name: Render production env
+        run: |
+          printf '%s' "${{ secrets.APP_ENV_PROD }}" > "${{ env.APP_DIR }}/.env.prod"
 
       - name: Verify env file
         working-directory: ${{ env.APP_DIR }}
