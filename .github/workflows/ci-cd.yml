@@ -77,37 +77,22 @@ jobs:
           grep -q '^CORS_ALLOWED_ORIGINS=' .env.prod
           grep -q '^TRUSTED_HOSTS=' .env.prod
 
-      - name: Prepare rollback tags
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          if docker image inspect service-order-api:prod-current >/dev/null 2>&1; then
-            docker tag service-order-api:prod-current service-order-api:prod-previous
-          fi
-
       - name: Build image locally
         working-directory: ${{ env.APP_DIR }}
         run: |
           docker build -t service-order-api:${GITHUB_SHA} .
-          docker tag service-order-api:${GITHUB_SHA} service-order-api:prod-current
-
-      - name: Cleanup previous compose state
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          docker compose --env-file .env.prod -f docker-compose.prod.yml down --remove-orphans || true
 
       - name: Run migrations
         working-directory: ${{ env.APP_DIR }}
         run: |
           API_IMAGE=service-order-api:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
           docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 
       - name: Start application
         working-directory: ${{ env.APP_DIR }}
         run: |
           API_IMAGE=service-order-api:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
-          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans api
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
 
       - name: Healthcheck
         run: |
