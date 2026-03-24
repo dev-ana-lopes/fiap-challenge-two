@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # === Python bytecode / caches ===
 __pycache__/
@@ -66,5 +67,8 @@ ehthumbs.db
 
 # === Docker / local volumes ===
 *.pid
+secrets/
+.secrets/
+/tmp/
 
 tech_challenge_extracted.txt

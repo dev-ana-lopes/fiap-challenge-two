@@ -1,15 +1,14 @@
-from datetime import datetime
 from uuid import uuid4
 
-from ..dto.login_dto import LoginDTO
 from ...domain.entities import User
 from ...domain.repositories import UserRepository
-from ...infrastructure.email.password_hasher import PasswordHasher
+from ...domain.time import utcnow
 from ...infrastructure.email.jwt_service import JwtService
+from ...infrastructure.email.password_hasher import PasswordHasher
+from ..dto.login_dto import LoginDTO
 
 
 class AuthenticateUserUseCase:
-
     def __init__(
         self,
         user_repo: UserRepository,
@@ -26,9 +25,7 @@ class AuthenticateUserUseCase:
         if user is None:
             return None
 
-        if not self.password_hasher.verify_password(
-            dto.password, user.password_hash
-        ):
+        if not self.password_hasher.verify_password(dto.password, user.password_hash):
             return None
 
         token = self.jwt_service.create_token(str(user.id), user.email)
@@ -36,7 +33,6 @@ class AuthenticateUserUseCase:
 
 
 class RegisterUserUseCase:
-
     def __init__(
         self,
         user_repo: UserRepository,
@@ -53,7 +49,7 @@ class RegisterUserUseCase:
             id=user_id,
             email=email,
             password_hash=password_hash,
-            created_at=datetime.utcnow(),
+            created_at=utcnow(),
         )
 
         await self.user_repo.save(user)

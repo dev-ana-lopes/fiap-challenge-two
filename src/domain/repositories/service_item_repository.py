@@ -5,7 +5,6 @@ from ..entities import ServiceItem
 
 
 class ServiceItemRepository(ABC):
-
     @abstractmethod
     async def save(self, service_item: ServiceItem) -> None:
         pass
@@ -15,7 +14,5 @@ class ServiceItemRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_service_order_id(
-        self, service_order_id: UUID
-    ) -> list[ServiceItem]:
+    async def get_by_service_order_id(self, service_order_id: UUID) -> list[ServiceItem]:
         pass

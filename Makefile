@@ -1,4 +1,4 @@
-.PHONY: help install dev-install lint format test migrate run run-dev build compose-up compose-down clean
+.PHONY: help install dev-install lint format test test-cov migrate migrate-create migrate-down run run-dev compose-up compose-down compose-logs compose-db-shell compose-prod-up compose-prod-down clean build-docker docker-run check
 
 help:
 	@echo "Service Order Management API - Make Commands"
@@ -10,24 +10,26 @@ help:
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make format           Format code with black & isort"
-	@echo "  make lint             Run flake8 linter"
-	@echo "  make test             Run pytest test suite"
-	@echo "  make test-cov         Run tests with coverage report"
+	@echo "  make lint             Run flake8"
+	@echo "  make test             Run pytest"
+	@echo "  make test-cov         Run pytest with coverage"
 	@echo ""
 	@echo "Database:"
 	@echo "  make migrate          Apply database migrations"
-	@echo "  make migrate-create   Create new migration"
+	@echo "  make migrate-create   Create a new migration"
+	@echo "  make migrate-down     Roll back the latest migration"
 	@echo ""
 	@echo "Running:"
-	@echo "  make run              Run API server (production)"
-	@echo "  make run-dev          Run API server (development with reload)"
-	@echo "  make compose-up       Start Docker compose services"
-	@echo "  make compose-down     Stop Docker compose services"
+	@echo "  make run              Run API server"
+	@echo "  make run-dev          Run API server with reload"
+	@echo "  make compose-up       Start local Docker stack"
+	@echo "  make compose-down     Stop local Docker stack"
+	@echo "  make compose-prod-up  Start production compose stack"
+	@echo "  make compose-prod-down Stop production compose stack"
 	@echo ""
 	@echo "Utilities:"
-	@echo "  make clean            Remove build artifacts"
-	@echo "  make shell            Activate Poetry virtual environment"
-	@echo ""
+	@echo "  make build-docker     Build local production image"
+	@echo "  make clean            Remove generated artifacts"
 
 install:
 	poetry install
@@ -40,14 +42,16 @@ format:
 	poetry run isort src tests
 
 lint:
+	poetry run black --check src tests
+	poetry run isort --check-only src tests
 	poetry run flake8 src tests
 
 test:
-	poetry run pytest
+	poetry run pytest -q
 
 test-cov:
-	poetry run pytest --cov=src --cov-report=html
-	@echo "Coverage report generated in htmlcov/index.html"
+	poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html
+	@echo "Coverage reports generated in coverage.xml and htmlcov/index.html"
 
 migrate:
 	poetry run alembic -c alembic/alembic.ini upgrade head
@@ -66,14 +70,11 @@ run-dev:
 	poetry run uvicorn src.main:app --reload
 
 compose-up:
-	docker compose up -d
-	@echo "Waiting for database to be ready..."
-	@sleep 5
-	docker compose exec api poetry run alembic -c alembic/alembic.ini upgrade head
+	docker compose --env-file .env up -d --build
 	@echo "Services are running:"
 	@echo "  API: http://localhost:8000"
 	@echo "  Swagger: http://localhost:8000/docs"
-	@echo "  ReDoc: http://localhost:8000/redoc"
+	@echo "  MailHog: http://localhost:8025"
 
 compose-down:
 	docker compose down
@@ -84,37 +85,22 @@ compose-logs:
 compose-db-shell:
 	docker compose exec postgres psql -U service_order_user -d service_order_db
 
+compose-prod-up:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+
+compose-prod-down:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml down
+
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	rm -rf .pytest_cache
-	rm -rf .coverage
-	rm -rf htmlcov
-	rm -rf build dist *.egg-info
-
-shell:
-	poetry shell
-
-update-deps:
-	poetry update
-
-lock-deps:
-	poetry lock --no-update
-
-show-deps:
-	poetry show --tree
+	rm -rf .pytest_cache .coverage coverage.xml htmlcov build dist
 
 build-docker:
-	docker build -t service-order-api:1.0.0 .
+	docker build -t service-order-api:local .
 
 docker-run:
 	docker run -p 8000:8000 \
 		-e DATABASE_URL="postgresql+asyncpg://user:password@host:5432/service_order_db" \
-		service-order-api:1.0.0
+		service-order-api:local
 
-check: format lint test
-	@echo "✓ Code formatted"
-	@echo "✓ Linting passed"
-	@echo "✓ Tests passed"
-	@echo ""
-	@echo "All checks passed!"
+check: lint test
+	@echo "Checks passed."

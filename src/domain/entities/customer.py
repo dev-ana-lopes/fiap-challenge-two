@@ -7,6 +7,7 @@ from uuid import UUID
 class Customer:
     id: UUID
     name: str
+    cpf_cnpj: str | None
     email: str
     phone: str
     created_at: datetime

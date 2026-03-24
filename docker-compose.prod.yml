@@ -1,50 +1,52 @@
-version: "3.8"
-
 services:
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${API_IMAGE:-service-order-api:local}
     container_name: service-order-migrate-prod
     restart: "no"
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+    env_file:
+      - ${APP_ENV_FILE:-.env.prod}
+    environment: &api_environment
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      APP_NAME: ${APP_NAME:-service-order-api}
+      APP_VERSION: ${APP_VERSION:-2.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:?TRUSTED_HOSTS is required}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_PASSWORD_FILE: ${SMTP_PASSWORD_FILE:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_AUTH: ${SMTP_USE_AUTH:-true}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:?SMTP_FROM_EMAIL is required}
+      APPROVAL_TOKEN_SECRET: ${APPROVAL_TOKEN_SECRET:?APPROVAL_TOKEN_SECRET is required}
+      APPROVAL_TOKEN_SECRET_FILE: ${APPROVAL_TOKEN_SECRET_FILE:-}
+      APPROVAL_TOKEN_TTL_MINUTES: ${APPROVAL_TOKEN_TTL_MINUTES:-60}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_SECRET_FILE: ${JWT_SECRET_FILE:-}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-5}
       MIGRATE_ON_STARTUP: "false"
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - service-order-network
-    command: ["poetry", "run", "alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
+    command: ["alembic", "-c", "alembic/alembic.ini", "upgrade", "head"]
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${API_IMAGE}
     container_name: service-order-api-prod
-    restart: always
+    init: true
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
-      MIGRATE_ON_STARTUP: "false"
+      <<: *api_environment
     depends_on:
-      postgres:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     networks:
@@ -55,40 +57,11 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: service-order-postgres-prod
-    restart: always
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-service_order_db}
-      POSTGRES_USER: ${POSTGRES_USER:-service_order_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-service_order_password}
-    ports:
-      - "5432:5432"
-    networks:
-      - service-order-network
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-service_order_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   service-order-network:

@@ -10,14 +10,15 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from src.infrastructure.database.models.base import Base
+from src.infrastructure.database import models
+from src.infrastructure.database.url_utils import normalize_postgresql_url_for_alembic
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+target_metadata = models.Base.metadata
 
 
 def _get_sqlalchemy_url() -> str:
@@ -27,10 +28,7 @@ def _get_sqlalchemy_url() -> str:
             "DATABASE_URL environment variable is required for Alembic migrations."
         )
 
-    if database_url.startswith("postgresql+asyncpg://"):
-        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-
-    return database_url
+    return normalize_postgresql_url_for_alembic(database_url)
 
 
 def run_migrations_offline() -> None:

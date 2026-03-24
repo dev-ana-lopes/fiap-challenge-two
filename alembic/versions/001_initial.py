@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "001_initial"
+revision = "d40d7727d25c4ce7b6f5fd8d4ef0ff4a"
 down_revision = None
 branch_labels = None
 depends_on = None

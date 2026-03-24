@@ -3,6 +3,46 @@ set -eu
 
 should_migrate="${MIGRATE_ON_STARTUP:-true}"
 
+python - <<'PY'
+import os
+import socket
+import sys
+
+from src.infrastructure.database.url_utils import validate_runtime_database_url
+
+
+database_url = os.environ.get("DATABASE_URL", "").strip()
+
+try:
+    host, port, database = validate_runtime_database_url(database_url)
+except ValueError as exc:
+    print(f"[entrypoint] {exc}", flush=True)
+    sys.exit(1)
+
+print(
+    f"[entrypoint] Database target host={host} port={port} db={database}",
+    flush=True,
+)
+
+try:
+    resolved = sorted(
+        {
+            result[4][0]
+            for result in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        }
+    )
+except OSError as exc:
+    print(
+        f"[entrypoint] Database host resolution failed for host={host}: {exc}",
+        flush=True,
+    )
+else:
+    print(
+        f"[entrypoint] Database host resolved to: {', '.join(resolved)}",
+        flush=True,
+    )
+PY
+
 if [ "$should_migrate" != "false" ]; then
   echo "[entrypoint] Running migrations (alembic upgrade head)..."
   attempts="${MIGRATE_MAX_ATTEMPTS:-30}"
@@ -10,7 +50,7 @@ if [ "$should_migrate" != "false" ]; then
 
   i=1
   while [ "$i" -le "$attempts" ]; do
-    if poetry run alembic -c alembic/alembic.ini upgrade head; then
+    if alembic -c alembic/alembic.ini upgrade head; then
       echo "[entrypoint] Migrations applied."
       break
     fi
@@ -28,4 +68,3 @@ fi
 
 echo "[entrypoint] Starting application: $*"
 exec "$@"
-

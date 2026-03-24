@@ -1,15 +1,6 @@
-from sqlalchemy import (
-    UUID,
-    Column,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    func,
-)
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, func
 
-Base = declarative_base()
+from .base import Base
 
 
 class VehicleModel(Base):

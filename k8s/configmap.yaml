@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-order-api-config
+data:
+  ENVIRONMENT: "production"
+  APP_BASE_URL: "https://api.example.com"
+  LOG_LEVEL: "INFO"
+  LOG_JSON: "true"
+  CORS_ALLOWED_ORIGINS: "https://app.example.com"
+  TRUSTED_HOSTS: "api.example.com"
+  SMTP_HOST: "smtp.example.com"
+  SMTP_PORT: "587"
+  SMTP_USE_TLS: "true"
+  SMTP_USE_AUTH: "true"
+  SMTP_TIMEOUT_SECONDS: "10"
+  SMTP_FROM_EMAIL: "oficina@example.com"
+  APPROVAL_TOKEN_TTL_MINUTES: "60"
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_MINUTES: "60"
+  HEALTHCHECK_TIMEOUT_SECONDS: "5"
+  MIGRATE_ON_STARTUP: "false"

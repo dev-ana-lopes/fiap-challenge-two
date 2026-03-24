@@ -1,0 +1,613 @@
+{
+  "info": {
+    "name": "Tech Challenge Workshop Service Orders API",
+    "_postman_id": "48f3d3dd-7f74-4b2b-9a92-c2cf99655fbe",
+    "description": "Collection aligned with the final FastAPI routes for the workshop service-order challenge.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';",
+          "",
+          "function seedDigits(value) {",
+          "  return String(value || Date.now()).replace(/\\D/g, '').padStart(9, '0').slice(-9);",
+          "}",
+          "",
+          "function cpfCheckDigit(values) {",
+          "  let factor = values.length + 1;",
+          "  let total = 0;",
+          "  values.forEach(function (value) {",
+          "    total += value * factor;",
+          "    factor -= 1;",
+          "  });",
+          "  const remainder = total % 11;",
+          "  return remainder < 2 ? 0 : 11 - remainder;",
+          "}",
+          "",
+          "function buildCpf(seedValue) {",
+          "  const digits = seedDigits(seedValue).split('').map(function (digit) {",
+          "    return Number(digit);",
+          "  });",
+          "  digits.push(cpfCheckDigit(digits));",
+          "  digits.push(cpfCheckDigit(digits));",
+          "  return digits.join('');",
+          "}",
+          "",
+          "function buildPlate(seedValue) {",
+          "  const digits = String(seedValue || Date.now()).replace(/\\D/g, '').slice(-4).padStart(4, '0');",
+          "  const letterIndex = Number(digits[1]) % alphabet.length;",
+          "  return 'TCW' + digits[0] + alphabet[letterIndex] + digits[2] + digits[3];",
+          "}",
+          "",
+          "function initializeRun(forceRefresh) {",
+          "  if (!forceRefresh && pm.environment.get('run_id')) {",
+          "    return;",
+          "  }",
+          "",
+          "  const runId = String(Date.now());",
+          "  pm.environment.set('run_id', runId);",
+          "  pm.environment.set('admin_email', 'admin+' + runId + '@example.com');",
+          "  pm.environment.set('admin_password', 'Admin1234');",
+          "  pm.environment.set('customer_email', 'maria+' + runId + '@example.com');",
+          "  pm.environment.set('customer_cpf_cnpj', buildCpf(runId));",
+          "  pm.environment.set('customer_name', 'Maria ' + runId);",
+          "  pm.environment.set('vehicle_plate', buildPlate(runId));",
+          "  pm.environment.set('service_description', 'Troca de oleo ' + runId);",
+          "  pm.environment.set('part_name', 'Filtro ' + runId);",
+          "  pm.environment.unset('access_token');",
+          "  pm.environment.unset('token_type');",
+          "  pm.environment.unset('customer_id');",
+          "  pm.environment.unset('vehicle_id');",
+          "  pm.environment.unset('service_id');",
+          "  pm.environment.unset('part_id');",
+          "  pm.environment.unset('service_order_id');",
+          "}",
+          "",
+          "initializeRun(pm.info.requestName === 'GET /health');"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('health is available', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('register returns 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.user_id).to.be.a('string').and.not.empty;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/register"
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.access_token).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('access_token', data.access_token);",
+                  "pm.environment.set('token_type', data.token_type || 'bearer');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "POST /customers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('customer created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.customer_id).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('customer_id', data.customer_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{customer_name}}\",\n  \"cpf_cnpj\": \"{{customer_cpf_cnpj}}\",\n  \"email\": \"{{customer_email}}\",\n  \"phone\": \"11999999999\"\n}"
+            },
+            "url": "{{base_url}}/customers"
+          }
+        },
+        {
+          "name": "GET /customers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('customers listed', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/customers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "item": [
+        {
+          "name": "POST /vehicles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('vehicle created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.vehicle_id).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('vehicle_id', data.vehicle_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla\",\n  \"year\": 2023,\n  \"plate\": \"{{vehicle_plate}}\"\n}"
+            },
+            "url": "{{base_url}}/vehicles"
+          }
+        },
+        {
+          "name": "GET /vehicles/{{vehicle_id}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('vehicle fetched', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/vehicles/{{vehicle_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "POST /catalog/services",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('catalog service created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.service_id).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('service_id', data.service_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"{{service_description}}\",\n  \"price\": 150.0\n}"
+            },
+            "url": "{{base_url}}/catalog/services"
+          }
+        },
+        {
+          "name": "POST /catalog/parts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('catalog part created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.part_id).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('part_id', data.part_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{part_name}}\",\n  \"unit_price\": 50.0,\n  \"stock_quantity\": 10\n}"
+            },
+            "url": "{{base_url}}/catalog/parts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Orders",
+      "item": [
+        {
+          "name": "POST /service-orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service order created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.service_order_id).to.be.a('string').and.not.empty;",
+                  "pm.environment.set('service_order_id', data.service_order_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"vehicle_id\": \"{{vehicle_id}}\",\n  \"service_ids\": [\"{{service_id}}\"],\n  \"part_refs\": [{\"part_id\": \"{{part_id}}\", \"quantity\": 1}]\n}"
+            },
+            "url": "{{base_url}}/service-orders"
+          }
+        },
+        {
+          "name": "GET /service-orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service orders listed', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/service-orders"
+          }
+        },
+        {
+          "name": "GET /service-orders/active",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('active service orders listed', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/service-orders/active"
+          }
+        },
+        {
+          "name": "GET /service-orders/{{service_order_id}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service order fetched', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/service-orders/{{service_order_id}}"
+          }
+        },
+        {
+          "name": "POST /service-orders/{{service_order_id}}/approval",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service order approved', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true\n}"
+            },
+            "url": "{{base_url}}/service-orders/{{service_order_id}}/approval"
+          }
+        },
+        {
+          "name": "PATCH /service-orders/{{service_order_id}}/status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service order status updated', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FINISHED\"\n}"
+            },
+            "url": "{{base_url}}/service-orders/{{service_order_id}}/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "GET /public/service-orders/{{service_order_id}}/status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('public service order status fetched', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/public/service-orders/{{service_order_id}}/status"
+          }
+        },
+        {
+          "name": "GET /public/service-orders/{{service_order_id}}/approval",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('approval_token')) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/public/service-orders/{{service_order_id}}/approval?token={{approval_token}}"
+          }
+        },
+        {
+          "name": "POST /public/service-orders/{{service_order_id}}/approval",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('approval_token')) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{approval_token}}\"\n}"
+            },
+            "url": "{{base_url}}/public/service-orders/{{service_order_id}}/approval"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "GET /metrics/average-execution-time",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('average execution time fetched', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/metrics/average-execution-time"
+          }
+        }
+      ]
+    }
+  ]
+}

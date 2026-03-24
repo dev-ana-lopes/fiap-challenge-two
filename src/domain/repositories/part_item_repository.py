@@ -5,7 +5,6 @@ from ..entities import PartItem
 
 
 class PartItemRepository(ABC):
-
     @abstractmethod
     async def save(self, part_item: PartItem) -> None:
         pass
@@ -15,7 +14,5 @@ class PartItemRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_service_order_id(
-        self, service_order_id: UUID
-    ) -> list[PartItem]:
+    async def get_by_service_order_id(self, service_order_id: UUID) -> list[PartItem]:
         pass

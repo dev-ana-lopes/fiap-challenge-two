@@ -1,7 +1,6 @@
-from sqlalchemy import Column, DateTime, String, UUID, func
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import UUID, Column, DateTime, String, func
 
-Base = declarative_base()
+from .base import Base
 
 
 class UserModel(Base):

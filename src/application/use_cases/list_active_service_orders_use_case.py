@@ -1,9 +1,8 @@
-from ...domain.repositories import ServiceOrderRepository
 from ...domain.enums import ServiceOrderStatus
+from ...domain.repositories import ServiceOrderRepository
 
 
 class ListActiveServiceOrdersUseCase:
-
     def __init__(self, service_order_repo: ServiceOrderRepository):
         self.service_order_repo = service_order_repo
 

@@ -10,7 +10,6 @@ from ..models.part_item_model import PartItemModel
 
 
 class PostgresPartItemRepository(PartItemRepository):
-
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -41,9 +40,7 @@ class PostgresPartItemRepository(PartItemRepository):
         self.session.add_all(models)
         await self.session.commit()
 
-    async def get_by_service_order_id(
-        self, service_order_id: UUID
-    ) -> list[PartItem]:
+    async def get_by_service_order_id(self, service_order_id: UUID) -> list[PartItem]:
         query = select(PartItemModel).where(
             PartItemModel.service_order_id == service_order_id
         )

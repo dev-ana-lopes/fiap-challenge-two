@@ -1,7 +1,6 @@
-from sqlalchemy import Column, DateTime, String, UUID, func
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import UUID, Column, DateTime, String, func
 
-Base = declarative_base()
+from .base import Base
 
 
 class CustomerModel(Base):
@@ -9,6 +8,7 @@ class CustomerModel(Base):
 
     id = Column(UUID, primary_key=True)
     name = Column(String(255), nullable=False)
+    cpf_cnpj = Column(String(14), nullable=True, unique=True)
     email = Column(String(255), nullable=False, unique=True)
     phone = Column(String(20), nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
