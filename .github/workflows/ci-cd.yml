@@ -75,19 +75,11 @@ jobs:
         run: |
           printf '%s' "${{ secrets.APP_ENV_PROD }}" > "${{ env.APP_DIR }}/.env.prod"
 
-      - name: Verify env file
+      - name: Prepare production env
         working-directory: ${{ env.APP_DIR }}
         run: |
           set -euo pipefail
-          test -f .env.prod
-          grep -q '^DATABASE_URL=' .env.prod
-          grep -q '^APP_BASE_URL=' .env.prod
-          grep -q '^CORS_ALLOWED_ORIGINS=' .env.prod
-          grep -q '^TRUSTED_HOSTS=' .env.prod
-          grep -q '^SMTP_HOST=' .env.prod
-          grep -q '^SMTP_FROM_EMAIL=' .env.prod
-          grep -q '^APPROVAL_TOKEN_SECRET=' .env.prod
-          grep -q '^JWT_SECRET=' .env.prod
+          python3 scripts/deploy/prepare_env.py .env.prod
 
       - name: Prepare rollback tags
         working-directory: ${{ env.APP_DIR }}
