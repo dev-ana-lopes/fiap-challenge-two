@@ -14,6 +14,7 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +38,8 @@ jobs:
           poetry run flake8 src tests
 
       - name: Test with coverage
-        run: poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml
+        run: |
+          poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml
 
   deploy-production:
     needs: validate
@@ -51,11 +53,11 @@ jobs:
 
       - name: Ensure app directory exists
         run: |
-          mkdir -p ${{ env.APP_DIR }}
+          mkdir -p "${{ env.APP_DIR }}"
 
       - name: Render production env
         run: |
-          printf '%s' "${{ secrets.APP_ENV_PROD }}" > ${{ env.APP_DIR }}/.env.prod
+          printf '%s' "${{ secrets.APP_ENV_PROD }}" > "${{ env.APP_DIR }}/.env.prod"
 
       - name: Sync files to app dir
         run: |
@@ -63,7 +65,16 @@ jobs:
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.venv' \
-            ./ ${{ env.APP_DIR }}/
+            ./ "${{ env.APP_DIR }}/"
+
+      - name: Verify env file
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          test -f .env.prod
+          grep -q '^DATABASE_URL=' .env.prod
+          grep -q '^APP_BASE_URL=' .env.prod
+          grep -q '^CORS_ALLOWED_ORIGINS=' .env.prod
+          grep -q '^TRUSTED_HOSTS=' .env.prod
 
       - name: Build image locally
         working-directory: ${{ env.APP_DIR }}
@@ -74,16 +85,21 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: |
           API_IMAGE=service-order-api:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
-          docker compose -f docker-compose.prod.yml run --rm migrate
+          docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 
       - name: Start application
         working-directory: ${{ env.APP_DIR }}
         run: |
           API_IMAGE=service-order-api:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
-          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
 
       - name: Healthcheck
         run: |
           curl -f http://localhost:8000/health/ready
+
+      - name: Show running containers
+        if: always()
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          docker ps -a
+          docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 || true
