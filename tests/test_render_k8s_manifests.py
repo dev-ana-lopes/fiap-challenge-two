@@ -4,7 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RENDER_SCRIPT = REPO_ROOT / "scripts" / "deploy" / "render_k8s_manifests.py"
 LOCAL_ENV_FILE = REPO_ROOT / "k8s.local.env"

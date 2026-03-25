@@ -113,9 +113,9 @@ async def service_order_api_context():
     app.dependency_overrides[get_catalog_service_repository] = override_catalog_repo
     app.dependency_overrides[get_inventory_part_repository] = override_inventory_repo
     app.dependency_overrides[get_email_sender] = override_email_sender
-    app.dependency_overrides[get_approval_token_service] = (
-        override_approval_token_service
-    )
+    app.dependency_overrides[
+        get_approval_token_service
+    ] = override_approval_token_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -197,9 +197,7 @@ async def test_open_service_order_returns_identifier_budget_and_email(
     assert response.status_code == 201
     service_order_id = response.json()["service_order_id"]
     assert service_order_id
-    assert (
-        service_order_api_context["inventory_repo"].parts[part.id].stock_quantity == 8
-    )
+    assert service_order_api_context["inventory_repo"].parts[part.id].stock_quantity == 8
     assert any(
         message["type"] == "approval_request"
         and message["service_order_id"] == service_order_id
