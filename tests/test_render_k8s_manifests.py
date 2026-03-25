@@ -6,21 +6,32 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RENDER_SCRIPT = REPO_ROOT / "scripts" / "deploy" / "render_k8s_manifests.py"
-LOCAL_ENV_FILE = REPO_ROOT / "k8s.local.env"
 
 
 def test_render_k8s_manifests_injects_image_into_job_and_deployment(
     tmp_path: Path,
 ) -> None:
+    env_file = tmp_path / "k8s.env"
     output_dir = tmp_path / "rendered-k8s"
     image = "ghcr.io/example/service-order-api:sha-test"
+    env_file.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/db",
+                "JWT_SECRET=jwt-secret-for-tests",
+                "APPROVAL_TOKEN_SECRET=approval-secret-for-tests",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
         [
             sys.executable,
             str(RENDER_SCRIPT),
             "--env-file",
-            str(LOCAL_ENV_FILE),
+            str(env_file),
             "--output-dir",
             str(output_dir),
             "--image",

@@ -14,6 +14,9 @@ from src.presentation.dependencies import db_dependencies
 from tests.support import create_test_app
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+INTEGRATION_TESTS_ENABLED = (
+    os.getenv("INTEGRATION_TESTS_ENABLED", "false").lower() == "true"
+)
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -128,6 +131,11 @@ def _generate_token(
 
 @pytest_asyncio.fixture
 async def integration_context():
+    if not INTEGRATION_TESTS_ENABLED:
+        pytest.skip(
+            "Set INTEGRATION_TESTS_ENABLED=true to run PostgreSQL integration tests."
+        )
+
     settings = _build_integration_settings()
     app = create_test_app()
 
@@ -137,6 +145,12 @@ async def integration_context():
     app.dependency_overrides[get_settings] = override_settings
     db_dependencies.database_session = None
     db_dependencies.init_database(settings)
+    if db_dependencies.database_session is None:
+        pytest.skip("Database session could not be initialized for integration tests.")
+    if not await db_dependencies.database_session.ping():
+        await db_dependencies.database_session.dispose()
+        db_dependencies.database_session = None
+        pytest.skip(f"Integration database is not reachable at {TEST_DATABASE_URL}.")
     await _truncate_tables()
 
     transport = ASGITransport(app=app)
