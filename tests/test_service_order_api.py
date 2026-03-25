@@ -197,7 +197,9 @@ async def test_open_service_order_returns_identifier_budget_and_email(
     assert response.status_code == 201
     service_order_id = response.json()["service_order_id"]
     assert service_order_id
-    assert service_order_api_context["inventory_repo"].parts[part.id].stock_quantity == 8
+    assert (
+        service_order_api_context["inventory_repo"].parts[part.id].stock_quantity == 8
+    )
     assert any(
         message["type"] == "approval_request"
         and message["service_order_id"] == service_order_id

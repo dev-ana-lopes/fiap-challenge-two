@@ -10,7 +10,9 @@ RENDER_SCRIPT = REPO_ROOT / "scripts" / "deploy" / "render_k8s_manifests.py"
 LOCAL_ENV_FILE = REPO_ROOT / "k8s.local.env"
 
 
-def test_render_k8s_manifests_injects_image_into_job_and_deployment(tmp_path: Path) -> None:
+def test_render_k8s_manifests_injects_image_into_job_and_deployment(
+    tmp_path: Path,
+) -> None:
     output_dir = tmp_path / "rendered-k8s"
     image = "ghcr.io/example/service-order-api:sha-test"
 
