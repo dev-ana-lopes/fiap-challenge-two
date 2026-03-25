@@ -1,38 +1,41 @@
-# README de Deploy
+# Deploy legado com EC2 + Docker Compose
 
-Guia de deploy para `EC2 + RDS` com Docker Compose, mantendo Kubernetes apenas como evolução futura.
+Este documento foi mantido como fallback operacional. O caminho principal da Fase 2 é `k3s + Terraform`, documentado no `README.md`, mas o fluxo legado com Docker Compose continua disponível para transição controlada.
 
-## Estratégia adotada
+## Quando usar
 
-- Build da imagem Docker localmente ou no CI
-- Publicação opcional em registry
-- Execução da aplicação em uma `EC2`
-- PostgreSQL gerenciado em `RDS`
-- Migrations executadas pelo serviço `migrate` antes da API
+- recuperação de um ambiente antigo baseado em Compose;
+- comparação entre a estratégia nova e o deploy anterior;
+- banca pedindo demonstração explícita do fluxo legado preservado.
+
+## Estratégia
+
+- build local da imagem na EC2;
+- `docker-compose.prod.yml` com serviço `migrate` + `api`;
+- validação de `.env.prod` com `scripts/deploy/prepare_env.py`;
+- healthcheck em `/health/ready`.
 
 ## Pré-requisitos
 
 - EC2 Linux com Docker e Docker Compose
-- RDS PostgreSQL acessível pela EC2
-- Arquivo `.env.prod` criado a partir de [.env.prod.example](/c:/fiap-challenge-two/.env.prod.example)
-- Security Groups liberando:
-  - `22` para administração
-  - `8000` para acesso à API
-  - `5432` da EC2 para o RDS
+- PostgreSQL acessível pela EC2
+- arquivo `.env.prod` criado a partir de `.env.prod.example`
+- security group com `8000` aberto se o fallback Compose for exposto
 
-## Bootstrap da EC2
+## Passo a passo
 
-No host recém-criado:
+### 1. Preparar o host
 
 ```bash
 chmod +x scripts/deploy/bootstrap_ec2.sh
 ./scripts/deploy/bootstrap_ec2.sh
 ```
 
-## Montagem do ambiente de produção
+### 2. Preparar o ambiente
 
 ```bash
 cp .env.prod.example .env.prod
+python3 scripts/deploy/prepare_env.py .env.prod
 ```
 
 Preencher obrigatoriamente:
@@ -41,84 +44,32 @@ Preencher obrigatoriamente:
 - `APP_BASE_URL`
 - `CORS_ALLOWED_ORIGINS`
 - `TRUSTED_HOSTS`
-- `SMTP_HOST`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD` ou `SMTP_PASSWORD_FILE`
-- `SMTP_FROM_EMAIL`
 - `JWT_SECRET` ou `JWT_SECRET_FILE`
 - `APPROVAL_TOKEN_SECRET` ou `APPROVAL_TOKEN_SECRET_FILE`
 
-Formato aceito para listas:
+Se `EMAIL_PROVIDER=SMTP`, preencher também:
 
-- `CORS_ALLOWED_ORIGINS=http://app.example.com,http://admin.example.com`
-- `TRUSTED_HOSTS=api.example.com,localhost`
-- ou JSON array, como `["http://app.example.com","http://admin.example.com"]`
+- `SMTP_HOST`
+- `SMTP_FROM_EMAIL`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD` ou `SMTP_PASSWORD_FILE`
 
-Validação local opcional antes do deploy:
-
-```bash
-python3 scripts/deploy/prepare_env.py .env.prod
-```
-
-## Fluxo de deploy manual
-
-Build local na EC2:
-
-```bash
-docker build -t service-order-api:local .
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
-```
-
-Ou usando imagem publicada:
-
-```bash
-API_IMAGE=123456789012.dkr.ecr.sa-east-1.amazonaws.com/service-order-api:<tag> \
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
-```
-
-## Fluxo de release recomendado
+### 3. Executar release
 
 ```bash
 chmod +x scripts/deploy/release.sh
 API_IMAGE=service-order-api:local ./scripts/deploy/release.sh
 ```
 
-O script:
+## Pipeline
 
-1. executa migrations
-2. sobe a API
-3. mostra o estado do compose
+O workflow `.github/workflows/ci-cd.yml` preserva esse caminho no `workflow_dispatch` com:
 
-## GitHub Actions
+- `deployment_target=compose-legacy`
 
-O workflow em [.github/workflows/ci-cd.yml](/c:/fiap-challenge-two/.github/workflows/ci-cd.yml) faz:
+Esse job continua usando o runner self-hosted existente, para não quebrar o fluxo anterior.
 
-- `validate`: lint + testes + cobertura
-- `build-image`: build local da imagem
-- `publish-image`: push opcional para ECR
-- `deploy-ec2`: deploy controlado por `workflow_dispatch`
-
-Segredos esperados para deploy automatizado:
-
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
-- `ECR_REGISTRY`
-- `ECR_REPOSITORY`
-- `EC2_HOST`
-- `EC2_USER`
-- `EC2_SSH_PRIVATE_KEY`
-- `APP_ENV_PROD`
-
-No deploy automatizado, o workflow renderiza `APP_ENV_PROD` em `.env.prod` e executa `scripts/deploy/prepare_env.py` para validar o arquivo e normalizar `CORS_ALLOWED_ORIGINS` e `TRUSTED_HOSTS` para JSON array antes do `docker compose`.
-
-## Estratégia de segredos
-
-- Local: `.env`
-- Produção: `.env.prod` fora do versionamento ou arquivos montados via `*_FILE`
-- Evolução AWS: usar `SSM Parameter Store` ou `Secrets Manager` para renderizar `APP_ENV_PROD` no pipeline, sem mudar o contrato da aplicação
-
-## Validações pós-deploy
+## Validação
 
 ```bash
 curl http://<host>:8000/health
@@ -126,6 +77,8 @@ curl http://<host>:8000/health/ready
 curl http://<host>:8000/docs
 ```
 
-Runbook detalhado:
+## Transição recomendada
 
-- [deploy-ec2-rds.md](/c:/fiap-challenge-two/docs/runbooks/deploy-ec2-rds.md)
+- usar o fallback Compose apenas enquanto necessário;
+- manter novas demonstrações e documentação centradas no fluxo `k3s`;
+- desligar a porta `8000` no Terraform quando o fallback não for mais necessário.

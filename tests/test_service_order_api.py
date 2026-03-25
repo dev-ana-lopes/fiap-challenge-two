@@ -113,9 +113,9 @@ async def service_order_api_context():
     app.dependency_overrides[get_catalog_service_repository] = override_catalog_repo
     app.dependency_overrides[get_inventory_part_repository] = override_inventory_repo
     app.dependency_overrides[get_email_sender] = override_email_sender
-    app.dependency_overrides[
-        get_approval_token_service
-    ] = override_approval_token_service
+    app.dependency_overrides[get_approval_token_service] = (
+        override_approval_token_service
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -304,6 +304,15 @@ async def test_public_approval_supports_email_click_and_external_notification(
     )
     assert public_get.status_code == 200
     assert public_get.json()["decision"] == "APPROVED"
+    public_approve_status = await service_order_api_context["client"].get(
+        f"/public/service-orders/{approve_order_id}/status"
+    )
+    assert public_approve_status.status_code == 200
+    assert public_approve_status.json() == {
+        "status": "IN_PROGRESS",
+        "approval_decision": "APPROVED",
+        "rejection_reason": None,
+    }
 
     reject_response = await service_order_api_context["client"].post(
         "/service-orders",
@@ -327,6 +336,15 @@ async def test_public_approval_supports_email_click_and_external_notification(
     )
     assert public_post.status_code == 200
     assert public_post.json()["decision"] == "REJECTED"
+    public_reject_status = await service_order_api_context["client"].get(
+        f"/public/service-orders/{reject_order_id}/status"
+    )
+    assert public_reject_status.status_code == 200
+    assert public_reject_status.json() == {
+        "status": "DIAGNOSIS",
+        "approval_decision": "REJECTED",
+        "rejection_reason": None,
+    }
 
 
 @pytest.mark.asyncio

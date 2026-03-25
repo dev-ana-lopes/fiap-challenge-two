@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from ...domain.enums import ServiceOrderStatus
@@ -6,6 +7,8 @@ from ...domain.repositories import CustomerRepository, ServiceOrderRepository
 from ...domain.services import ApprovalTokenService, EmailSender
 from ...domain.time import utcnow
 from .send_approval_request_email_use_case import SendApprovalRequestEmailUseCase
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateServiceOrderStatusUseCase:
@@ -39,16 +42,23 @@ class UpdateServiceOrderStatusUseCase:
         await self.service_order_repo.update(service_order)
 
         customer = await self.customer_repo.get_by_id(service_order.customer_id)
-        if customer is not None and status_enum == ServiceOrderStatus.WAITING_APPROVAL:
-            await self.send_approval_request_email_use_case.execute(
-                customer.email,
-                service_order,
-            )
-        elif customer is not None:
-            await self.email_sender.send_status_changed(
-                customer.email,
-                str(service_order_id),
-                status_enum.value,
-            )
+        if customer is not None:
+            try:
+                if status_enum == ServiceOrderStatus.WAITING_APPROVAL:
+                    await self.send_approval_request_email_use_case.execute(
+                        customer.email,
+                        service_order,
+                    )
+                else:
+                    await self.email_sender.send_status_changed(
+                        customer.email,
+                        str(service_order_id),
+                        status_enum.value,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to send notification for service order %s",
+                    service_order_id,
+                )
 
         return status_enum

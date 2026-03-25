@@ -79,6 +79,50 @@ def test_settings_reject_unsafe_production_defaults():
         )
 
 
+def test_settings_allow_noop_email_provider_in_production_demo_mode():
+    settings = Settings(
+        DATABASE_URL=(
+            "postgresql+asyncpg://service_order_user:password@db.internal:5432/"
+            "service_order_db"
+        ),
+        ENVIRONMENT="production",
+        EMAIL_PROVIDER="noop",
+        APP_BASE_URL="https://api.workshop-demo.fiap",
+        SMTP_HOST="mailhog",
+        SMTP_USE_AUTH=False,
+        SMTP_FROM_EMAIL="",
+        JWT_SECRET="jwt-secret-value-with-32-characters",
+        APPROVAL_TOKEN_SECRET="approval-secret-value-with-32-chars",
+        CORS_ALLOWED_ORIGINS=["https://app.workshop-demo.fiap"],
+        TRUSTED_HOSTS=["api.workshop-demo.fiap"],
+    )
+
+    assert settings.EMAIL_PROVIDER == "NOOP"
+
+
+def test_settings_allow_optional_smtp_values_in_production():
+    settings = Settings(
+        DATABASE_URL=(
+            "postgresql+asyncpg://service_order_user:password@db.internal:5432/"
+            "service_order_db"
+        ),
+        ENVIRONMENT="production",
+        EMAIL_PROVIDER="SMTP",
+        APP_BASE_URL="https://api.workshop-demo.fiap",
+        SMTP_HOST="",
+        SMTP_FROM_EMAIL="",
+        SMTP_USERNAME="",
+        SMTP_PASSWORD="",
+        CORS_ALLOWED_ORIGINS=["https://app.workshop-demo.fiap"],
+        TRUSTED_HOSTS=["api.workshop-demo.fiap"],
+        JWT_SECRET="jwt-secret-value-with-32-characters",
+        APPROVAL_TOKEN_SECRET="approval-secret-value-with-32-chars",
+    )
+
+    assert settings.EMAIL_PROVIDER == "SMTP"
+    assert settings.SMTP_HOST == ""
+
+
 @pytest_asyncio.fixture
 async def health_app():
     app = create_test_app()

@@ -48,15 +48,21 @@ class ApplyServiceOrderApprovalDecisionUseCase:
 
         customer = await self.customer_repo.get_by_id(service_order.customer_id)
         if customer is not None:
-            logger.info(
-                "Service order %s %s by customer approval flow",
-                service_order_id,
-                "approved" if approved else "rejected",
-            )
-            await self.email_sender.send_status_changed(
-                customer.email,
-                str(service_order_id),
-                new_status.value,
-            )
+            try:
+                logger.info(
+                    "Service order %s %s by customer approval flow",
+                    service_order_id,
+                    "approved" if approved else "rejected",
+                )
+                await self.email_sender.send_status_changed(
+                    customer.email,
+                    str(service_order_id),
+                    new_status.value,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to send status update email for service order %s",
+                    service_order_id,
+                )
 
         return new_status

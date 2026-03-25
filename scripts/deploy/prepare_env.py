@@ -7,14 +7,20 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-BOOLEAN_FIELDS = ("LOG_JSON", "SMTP_USE_TLS", "SMTP_USE_AUTH")
-POSITIVE_INTEGER_FIELDS = (
-    "SMTP_PORT",
-    "SMTP_TIMEOUT_SECONDS",
+REQUIRED_BOOLEAN_FIELDS = ("LOG_JSON",)
+OPTIONAL_BOOLEAN_DEFAULTS = {
+    "SMTP_USE_TLS": "false",
+    "SMTP_USE_AUTH": "false",
+}
+REQUIRED_POSITIVE_INTEGER_FIELDS = (
     "HEALTHCHECK_TIMEOUT_SECONDS",
     "APPROVAL_TOKEN_TTL_MINUTES",
     "JWT_EXPIRATION_MINUTES",
 )
+OPTIONAL_POSITIVE_INTEGER_DEFAULTS = {
+    "SMTP_PORT": "587",
+    "SMTP_TIMEOUT_SECONDS": "10",
+}
 REQUIRED_TEXT_FIELDS = (
     "APP_NAME",
     "APP_VERSION",
@@ -25,11 +31,10 @@ REQUIRED_TEXT_FIELDS = (
     "APP_BASE_URL",
     "CORS_ALLOWED_ORIGINS",
     "TRUSTED_HOSTS",
-    "SMTP_HOST",
-    "SMTP_FROM_EMAIL",
     "JWT_ALGORITHM",
 )
 VALID_ENVIRONMENTS = {"development", "test", "staging", "production"}
+VALID_EMAIL_PROVIDERS = {"SMTP", "NOOP"}
 
 
 class EnvValidationError(ValueError):
@@ -94,6 +99,31 @@ def normalize_positive_integer(values: dict[str, str], key: str) -> None:
     values[key] = str(number)
 
 
+def normalize_optional_boolean(values: dict[str, str], key: str, default: str) -> bool:
+    raw_value = values.get(key, "").strip().lower()
+    if not raw_value:
+        if key in values:
+            values[key] = default
+        return default == "true"
+
+    if raw_value not in {"true", "false"}:
+        raise EnvValidationError(f"{key} must be true or false.")
+    values[key] = raw_value
+    return raw_value == "true"
+
+
+def normalize_optional_positive_integer(
+    values: dict[str, str], key: str, default: str
+) -> None:
+    raw_value = values.get(key, "").strip()
+    if not raw_value:
+        if key in values:
+            values[key] = default
+        return
+
+    normalize_positive_integer(values, key)
+
+
 def validate_database_url(values: dict[str, str]) -> None:
     database_url = require_non_empty(values, "DATABASE_URL")
     if not database_url.startswith(("postgresql://", "postgresql+asyncpg://")):
@@ -138,17 +168,23 @@ def validate_environment(values: dict[str, str]) -> None:
     values["ENVIRONMENT"] = environment
 
 
-def validate_secret_contract(values: dict[str, str], smtp_use_auth: bool) -> None:
+def normalize_email_provider(values: dict[str, str]) -> str:
+    provider = values.get("EMAIL_PROVIDER", "SMTP").strip().upper() or "SMTP"
+    if provider not in VALID_EMAIL_PROVIDERS:
+        raise EnvValidationError("EMAIL_PROVIDER must be SMTP or NOOP.")
+    values["EMAIL_PROVIDER"] = provider
+    return provider
+
+
+def validate_secret_contract(
+    values: dict[str, str],
+) -> None:
     require_any(
         values,
         ("APPROVAL_TOKEN_SECRET", "APPROVAL_TOKEN_SECRET_FILE"),
         "Approval token secret",
     )
     require_any(values, ("JWT_SECRET", "JWT_SECRET_FILE"), "JWT secret")
-
-    if smtp_use_auth:
-        require_non_empty(values, "SMTP_USERNAME")
-        require_any(values, ("SMTP_PASSWORD", "SMTP_PASSWORD_FILE"), "SMTP password")
 
 
 def validate_required_text_fields(values: dict[str, str]) -> None:
@@ -175,19 +211,23 @@ def prepare_env(env_path: Path) -> None:
 
     validate_required_text_fields(values)
     validate_environment(values)
+    normalize_email_provider(values)
 
-    for key in BOOLEAN_FIELDS:
+    for key in REQUIRED_BOOLEAN_FIELDS:
         normalize_boolean(values, key)
-    smtp_auth_enabled = values["SMTP_USE_AUTH"] == "true"
+    for key, default in OPTIONAL_BOOLEAN_DEFAULTS.items():
+        normalize_optional_boolean(values, key, default)
 
-    for key in POSITIVE_INTEGER_FIELDS:
+    for key in REQUIRED_POSITIVE_INTEGER_FIELDS:
         normalize_positive_integer(values, key)
+    for key, default in OPTIONAL_POSITIVE_INTEGER_DEFAULTS.items():
+        normalize_optional_positive_integer(values, key, default)
 
     validate_database_url(values)
     validate_app_base_url(values)
     normalize_list_field(values, "CORS_ALLOWED_ORIGINS")
     normalize_list_field(values, "TRUSTED_HOSTS")
-    validate_secret_contract(values, smtp_auth_enabled)
+    validate_secret_contract(values)
     values["LOG_LEVEL"] = values["LOG_LEVEL"].upper()
 
     rewrite_env_file(env_path, entries, values)
