@@ -1,4 +1,4 @@
-.PHONY: help install dev-install lint format test test-cov migrate migrate-create migrate-down run run-dev compose-up compose-down compose-logs compose-db-shell compose-prod-up compose-prod-down clean build-docker docker-run check
+.PHONY: help install dev-install lint format test test-cov test-integration migrate migrate-create migrate-down run run-dev compose-up compose-down compose-logs compose-db-shell compose-prod-up compose-prod-down clean build-docker docker-run check
 
 help:
 	@echo "Service Order Management API - Make Commands"
@@ -13,6 +13,7 @@ help:
 	@echo "  make lint             Run flake8"
 	@echo "  make test             Run pytest"
 	@echo "  make test-cov         Run pytest with coverage"
+	@echo "  make test-integration Run integration tests against a real PostgreSQL"
 	@echo ""
 	@echo "Database:"
 	@echo "  make migrate          Apply database migrations"
@@ -52,6 +53,9 @@ test:
 test-cov:
 	poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html
 	@echo "Coverage reports generated in coverage.xml and htmlcov/index.html"
+
+test-integration:
+	INTEGRATION_TESTS_ENABLED=true poetry run pytest -q -m integration
 
 migrate:
 	poetry run alembic -c alembic/alembic.ini upgrade head

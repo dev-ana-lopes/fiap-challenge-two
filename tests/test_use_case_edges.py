@@ -5,6 +5,9 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from src.application.dto.create_service_order_dto import CreateServiceOrderDTO
+from src.application.use_cases.apply_service_order_approval_decision_use_case import (
+    ApplyServiceOrderApprovalDecisionUseCase,
+)
 from src.application.use_cases.catalog_use_cases import (
     CreateCatalogServiceUseCase,
     CreateInventoryPartUseCase,
@@ -27,6 +30,9 @@ from src.application.use_cases.customer_use_cases import (
     ListCustomersUseCase,
     UpdateCustomerUseCase,
 )
+from src.application.use_cases.update_service_order_status_use_case import (
+    UpdateServiceOrderStatusUseCase,
+)
 from src.domain.entities import Customer, ServiceOrder, Vehicle
 from src.domain.enums import ServiceOrderStatus
 from src.domain.time import utcnow
@@ -38,6 +44,7 @@ from src.presentation.dependencies.db_dependencies import (
     get_service_order_repository,
 )
 from tests.support import (
+    FailingEmailSender,
     MockApprovalTokenService,
     MockCatalogServiceRepository,
     MockCustomerRepository,
@@ -119,6 +126,48 @@ async def test_create_service_order_use_case_supports_legacy_inline_payload():
 
 
 @pytest.mark.asyncio
+async def test_create_service_order_use_case_is_best_effort_when_email_fails():
+    customer_repo = MockCustomerRepository()
+    vehicle_repo = MockVehicleRepository()
+    service_order_repo = MockServiceOrderRepository()
+    service_item_repo = MockServiceItemRepository()
+    part_item_repo = MockPartItemRepository()
+    catalog_repo = MockCatalogServiceRepository()
+    inventory_repo = MockInventoryPartRepository()
+    approval_token_service = MockApprovalTokenService()
+
+    use_case = CreateServiceOrderUseCase(
+        customer_repo,
+        vehicle_repo,
+        service_order_repo,
+        service_item_repo,
+        part_item_repo,
+        catalog_repo,
+        inventory_repo,
+        FailingEmailSender(),
+        approval_token_service,
+    )
+
+    service_order_id = await use_case.execute(
+        CreateServiceOrderDTO(
+            customer_name="Cliente Best Effort",
+            customer_email="cliente-best-effort@example.com",
+            customer_phone="11999999999",
+            vehicle_brand="Toyota",
+            vehicle_model="Corolla",
+            vehicle_year=2024,
+            vehicle_plate="BRA2A34",
+            services=[{"description": "Diagnostico", "price": 100.0}],
+            parts=[{"name": "Filtro", "price": 25.0, "quantity": 2}],
+        )
+    )
+
+    service_order = await service_order_repo.get_by_id(UUID(service_order_id))
+    assert service_order is not None
+    assert service_order.status == ServiceOrderStatus.WAITING_APPROVAL
+
+
+@pytest.mark.asyncio
 async def test_create_service_order_use_case_validates_missing_context_and_stock():
     customer_repo = MockCustomerRepository()
     vehicle_repo = MockVehicleRepository()
@@ -177,6 +226,54 @@ async def test_create_service_order_use_case_validates_missing_context_and_stock
                 services=[{"description": "Troca", "price": 10.0}],
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_approval_and_status_update_are_best_effort_when_email_fails():
+    customer_repo = MockCustomerRepository()
+    service_order_repo = MockServiceOrderRepository()
+    approval_token_service = MockApprovalTokenService()
+    email_sender = FailingEmailSender()
+    customer = Customer(
+        id=uuid4(),
+        name="Cliente",
+        cpf_cnpj=None,
+        email="cliente@example.com",
+        phone="11999999999",
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    service_order = ServiceOrder(
+        id=uuid4(),
+        customer_id=customer.id,
+        vehicle_id=uuid4(),
+        status=ServiceOrderStatus.WAITING_APPROVAL,
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+
+    await customer_repo.save(customer)
+    await service_order_repo.save(service_order)
+
+    approval_use_case = ApplyServiceOrderApprovalDecisionUseCase(
+        service_order_repo,
+        customer_repo,
+        email_sender,
+    )
+    approval_status = await approval_use_case.execute(service_order.id, approved=False)
+    assert approval_status == ServiceOrderStatus.DIAGNOSIS
+
+    update_use_case = UpdateServiceOrderStatusUseCase(
+        service_order_repo,
+        customer_repo,
+        email_sender,
+        approval_token_service,
+    )
+    updated_status = await update_use_case.execute(
+        service_order.id,
+        ServiceOrderStatus.WAITING_APPROVAL.value,
+    )
+    assert updated_status == ServiceOrderStatus.WAITING_APPROVAL
 
 
 @pytest.mark.asyncio

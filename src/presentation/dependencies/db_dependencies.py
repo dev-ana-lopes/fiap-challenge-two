@@ -1,6 +1,16 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...domain.repositories import (
+    CatalogServiceRepository,
+    CustomerRepository,
+    InventoryPartRepository,
+    PartItemRepository,
+    ServiceItemRepository,
+    ServiceOrderRepository,
+    UserRepository,
+    VehicleRepository,
+)
 from ...domain.services import ApprovalTokenService, EmailSender
 from ...infrastructure.config.settings import Settings, get_settings
 from ...infrastructure.database.repositories.catalog_service_repository import (
@@ -28,10 +38,13 @@ from ...infrastructure.database.repositories.vehicle_repository import (
     PostgresVehicleRepository,
 )
 from ...infrastructure.database.session import DatabaseSession
-from ...infrastructure.email.approval_token_service import JwtApprovalTokenService
-from ...infrastructure.email.jwt_service import JwtService
-from ...infrastructure.email.password_hasher import PasswordHasher
-from ...infrastructure.email.smtp_client import SmtpEmailSender
+from ...infrastructure.email import (
+    JwtApprovalTokenService,
+    JwtService,
+    NoopEmailSender,
+    PasswordHasher,
+    SmtpEmailSender,
+)
 
 database_session: DatabaseSession | None = None
 
@@ -59,55 +72,57 @@ async def get_session(
 
 async def get_customer_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresCustomerRepository:
+) -> CustomerRepository:
     return PostgresCustomerRepository(session)
 
 
 async def get_catalog_service_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresCatalogServiceRepository:
+) -> CatalogServiceRepository:
     return PostgresCatalogServiceRepository(session)
 
 
 async def get_inventory_part_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresInventoryPartRepository:
+) -> InventoryPartRepository:
     return PostgresInventoryPartRepository(session)
 
 
 async def get_vehicle_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresVehicleRepository:
+) -> VehicleRepository:
     return PostgresVehicleRepository(session)
 
 
 async def get_service_order_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresServiceOrderRepository:
+) -> ServiceOrderRepository:
     return PostgresServiceOrderRepository(session)
 
 
 async def get_service_item_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresServiceItemRepository:
+) -> ServiceItemRepository:
     return PostgresServiceItemRepository(session)
 
 
 async def get_part_item_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresPartItemRepository:
+) -> PartItemRepository:
     return PostgresPartItemRepository(session)
 
 
 async def get_user_repository(
     session: AsyncSession = Depends(get_session),
-) -> PostgresUserRepository:
+) -> UserRepository:
     return PostgresUserRepository(session)
 
 
 def get_email_sender(
     settings: Settings = Depends(get_settings),
 ) -> EmailSender:
+    if settings.EMAIL_PROVIDER == "NOOP":
+        return NoopEmailSender()
     return SmtpEmailSender(settings)
 
 

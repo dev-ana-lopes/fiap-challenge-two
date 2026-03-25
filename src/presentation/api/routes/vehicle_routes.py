@@ -10,6 +10,7 @@ from ....application.use_cases.vehicle_use_cases import (
     ListVehiclesUseCase,
     UpdateVehicleUseCase,
 )
+from ....domain.repositories import CustomerRepository, VehicleRepository
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
     get_customer_repository,
@@ -27,8 +28,8 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-VehicleRepo = Annotated[object, Depends(get_vehicle_repository)]
-CustomerRepo = Annotated[object, Depends(get_customer_repository)]
+VehicleRepo = Annotated[VehicleRepository, Depends(get_vehicle_repository)]
+CustomerRepo = Annotated[CustomerRepository, Depends(get_customer_repository)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

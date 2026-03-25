@@ -10,6 +10,7 @@ from ....application.use_cases.customer_use_cases import (
     ListCustomersUseCase,
     UpdateCustomerUseCase,
 )
+from ....domain.repositories import CustomerRepository
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import get_customer_repository
 from ....presentation.schemas.admin_schema import (
@@ -24,7 +25,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-CustomerRepo = Annotated[object, Depends(get_customer_repository)]
+CustomerRepo = Annotated[CustomerRepository, Depends(get_customer_repository)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

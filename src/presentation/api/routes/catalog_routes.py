@@ -15,6 +15,7 @@ from ....application.use_cases.catalog_use_cases import (
     UpdateCatalogServiceUseCase,
     UpdateInventoryPartUseCase,
 )
+from ....domain.repositories import CatalogServiceRepository, InventoryPartRepository
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
     get_catalog_service_repository,
@@ -35,8 +36,12 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-CatalogServiceRepo = Annotated[object, Depends(get_catalog_service_repository)]
-InventoryPartRepo = Annotated[object, Depends(get_inventory_part_repository)]
+CatalogServiceRepo = Annotated[
+    CatalogServiceRepository, Depends(get_catalog_service_repository)
+]
+InventoryPartRepo = Annotated[
+    InventoryPartRepository, Depends(get_inventory_part_repository)
+]
 
 
 @router.post("/services", status_code=status.HTTP_201_CREATED)

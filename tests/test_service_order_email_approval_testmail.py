@@ -158,5 +158,6 @@ async def test_service_order_email_approval_flow_with_testmail_live():
             )
             assert status_response.status_code == 200
             assert status_response.json()["status"] == "IN_PROGRESS"
+            assert status_response.json()["approval_decision"] == "APPROVED"
     finally:
         app.dependency_overrides.clear()

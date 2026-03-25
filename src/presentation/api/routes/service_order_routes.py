@@ -25,11 +25,23 @@ from ....application.use_cases.list_service_orders_use_case import (
 from ....application.use_cases.update_service_order_status_use_case import (
     UpdateServiceOrderStatusUseCase,
 )
+from ....domain.entities import ServiceOrder
 from ....domain.errors import (
     ApprovalActionAlreadyProcessedError,
     InvalidServiceOrderTransitionError,
     ServiceOrderNotFoundError,
 )
+from ....domain.repositories import (
+    CatalogServiceRepository,
+    CustomerRepository,
+    InventoryPartRepository,
+    PartItemRepository,
+    ServiceItemRepository,
+    ServiceOrderRepository,
+    VehicleRepository,
+)
+from ....domain.services import ApprovalTokenService, EmailSender
+from ....presentation.api.serializers import serialize_service_order
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import (
     get_approval_token_service,
@@ -47,8 +59,6 @@ from ....presentation.schemas.service_order_schema import (
     ApproveServiceOrderResponse,
     CreateServiceOrderRequest,
     CreateServiceOrderResponse,
-    PartItemResponse,
-    ServiceItemResponse,
     ServiceOrderResponse,
     ServiceOrderStatusResponse,
     UpdateServiceOrderStatusRequest,
@@ -60,65 +70,23 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-CustomerRepo = Annotated[object, Depends(get_customer_repository)]
-CatalogServiceRepo = Annotated[object, Depends(get_catalog_service_repository)]
-VehicleRepo = Annotated[object, Depends(get_vehicle_repository)]
-ServiceOrderRepo = Annotated[object, Depends(get_service_order_repository)]
-ServiceItemRepo = Annotated[object, Depends(get_service_item_repository)]
-PartItemRepo = Annotated[object, Depends(get_part_item_repository)]
-InventoryPartRepo = Annotated[object, Depends(get_inventory_part_repository)]
-EmailSender = Annotated[object, Depends(get_email_sender)]
-ApprovalTokenSvc = Annotated[object, Depends(get_approval_token_service)]
-
-
-def _to_service_order_response(service_order) -> ServiceOrderResponse:
-    return ServiceOrderResponse(
-        id=str(service_order.id),
-        customer_id=str(service_order.customer_id),
-        vehicle_id=str(service_order.vehicle_id),
-        status=service_order.status.value,
-        created_at=service_order.created_at.isoformat(),
-        updated_at=service_order.updated_at.isoformat(),
-        started_at=(
-            service_order.started_at.isoformat()
-            if service_order.started_at is not None
-            else None
-        ),
-        finished_at=(
-            service_order.finished_at.isoformat()
-            if service_order.finished_at is not None
-            else None
-        ),
-        budget_total=service_order.budget_total,
-        approval_decision=(
-            service_order.approval_decision.value
-            if service_order.approval_decision is not None
-            else None
-        ),
-        approval_decision_at=(
-            service_order.approval_decision_at.isoformat()
-            if service_order.approval_decision_at is not None
-            else None
-        ),
-        rejection_reason=service_order.rejection_reason,
-        service_items=[
-            ServiceItemResponse(
-                id=str(item.id),
-                description=item.description,
-                price=item.price,
-            )
-            for item in service_order.service_items
-        ],
-        part_items=[
-            PartItemResponse(
-                id=str(item.id),
-                name=item.name,
-                price=item.price,
-                quantity=item.quantity,
-            )
-            for item in service_order.part_items
-        ],
-    )
+CustomerRepo = Annotated[CustomerRepository, Depends(get_customer_repository)]
+CatalogServiceRepo = Annotated[
+    CatalogServiceRepository,
+    Depends(get_catalog_service_repository),
+]
+VehicleRepo = Annotated[VehicleRepository, Depends(get_vehicle_repository)]
+ServiceOrderRepo = Annotated[
+    ServiceOrderRepository, Depends(get_service_order_repository)
+]
+ServiceItemRepo = Annotated[ServiceItemRepository, Depends(get_service_item_repository)]
+PartItemRepo = Annotated[PartItemRepository, Depends(get_part_item_repository)]
+InventoryPartRepo = Annotated[
+    InventoryPartRepository,
+    Depends(get_inventory_part_repository),
+]
+EmailGateway = Annotated[EmailSender, Depends(get_email_sender)]
+ApprovalTokenSvc = Annotated[ApprovalTokenService, Depends(get_approval_token_service)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -131,7 +99,7 @@ async def create_service_order(
     part_item_repo: PartItemRepo,
     catalog_service_repo: CatalogServiceRepo,
     inventory_part_repo: InventoryPartRepo,
-    email_sender: EmailSender,
+    email_sender: EmailGateway,
     approval_token_service: ApprovalTokenSvc,
 ) -> CreateServiceOrderResponse:
     if not request.service_ids and not request.services:
@@ -210,7 +178,7 @@ async def list_active_service_orders(
 ) -> list[ServiceOrderResponse]:
     use_case = ListActiveServiceOrdersUseCase(service_order_repo)
     return [
-        _to_service_order_response(service_order)
+        serialize_service_order(service_order)
         for service_order in await use_case.execute()
     ]
 
@@ -248,13 +216,13 @@ async def get_service_order(
     service_order_repo: ServiceOrderRepo,
 ) -> ServiceOrderResponse:
     use_case = GetServiceOrderDetailsUseCase(service_order_repo)
-    service_order = await use_case.execute(id)
+    service_order: ServiceOrder | None = await use_case.execute(id)
     if service_order is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Service order not found",
         )
-    return _to_service_order_response(service_order)
+    return serialize_service_order(service_order)
 
 
 @router.get("")
@@ -263,7 +231,7 @@ async def list_service_orders(
 ) -> list[ServiceOrderResponse]:
     use_case = ListServiceOrdersUseCase(service_order_repo)
     return [
-        _to_service_order_response(service_order)
+        serialize_service_order(service_order)
         for service_order in await use_case.execute()
     ]
 
@@ -274,7 +242,7 @@ async def approve_service_order(
     request: ApproveServiceOrderRequest,
     customer_repo: CustomerRepo,
     service_order_repo: ServiceOrderRepo,
-    email_sender: EmailSender,
+    email_sender: EmailGateway,
 ) -> ApproveServiceOrderResponse:
     use_case = ApproveServiceOrderUseCase(
         service_order_repo, customer_repo, email_sender
@@ -309,7 +277,7 @@ async def update_service_order_status(
     request: UpdateServiceOrderStatusRequest,
     customer_repo: CustomerRepo,
     service_order_repo: ServiceOrderRepo,
-    email_sender: EmailSender,
+    email_sender: EmailGateway,
     approval_token_service: ApprovalTokenSvc,
 ) -> dict:
     use_case = UpdateServiceOrderStatusUseCase(

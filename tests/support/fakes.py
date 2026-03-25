@@ -193,6 +193,14 @@ class MockEmailSender:
 
 
 class FailingEmailSender(MockEmailSender):
+    async def send_email(self, to_email: str, subject: str, body: str) -> None:
+        raise RuntimeError("SMTP unavailable")
+
+    async def send_status_changed(
+        self, customer_email: str, service_order_id: str, new_status: str
+    ) -> None:
+        raise RuntimeError("SMTP unavailable")
+
     async def send_approval_request(
         self,
         message: ApprovalRequestEmailMessage,

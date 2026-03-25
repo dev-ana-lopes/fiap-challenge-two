@@ -2,7 +2,7 @@
 name = "service-order-api"
 version = "1.0.0"
 description = "Service Order Management API for mechanical workshop system"
-authors = ["Claude <noreply@anthropic.com>"]
+authors = ["Ana Lopes <dev.anajulia@outlook.com.br>"]
 readme = "README.md"
 packages = [{include = "src"}]
 
@@ -48,5 +48,6 @@ asyncio_mode = "auto"
 markers = [
     "e2e: end-to-end API and email workflow tests",
     "integration: tests that exercise external integrations",
+    "mailhog: local end-to-end tests against MailHog and a running stack",
     "testmail: live tests that query the Testmail API",
 ]

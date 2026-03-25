@@ -304,6 +304,15 @@ async def test_public_approval_supports_email_click_and_external_notification(
     )
     assert public_get.status_code == 200
     assert public_get.json()["decision"] == "APPROVED"
+    public_approve_status = await service_order_api_context["client"].get(
+        f"/public/service-orders/{approve_order_id}/status"
+    )
+    assert public_approve_status.status_code == 200
+    assert public_approve_status.json() == {
+        "status": "IN_PROGRESS",
+        "approval_decision": "APPROVED",
+        "rejection_reason": None,
+    }
 
     reject_response = await service_order_api_context["client"].post(
         "/service-orders",
@@ -327,6 +336,15 @@ async def test_public_approval_supports_email_click_and_external_notification(
     )
     assert public_post.status_code == 200
     assert public_post.json()["decision"] == "REJECTED"
+    public_reject_status = await service_order_api_context["client"].get(
+        f"/public/service-orders/{reject_order_id}/status"
+    )
+    assert public_reject_status.status_code == 200
+    assert public_reject_status.json() == {
+        "status": "DIAGNOSIS",
+        "approval_decision": "REJECTED",
+        "rejection_reason": None,
+    }
 
 
 @pytest.mark.asyncio

@@ -70,5 +70,6 @@ ehthumbs.db
 secrets/
 .secrets/
 /tmp/
+/.tmp/
 
 tech_challenge_extracted.txt

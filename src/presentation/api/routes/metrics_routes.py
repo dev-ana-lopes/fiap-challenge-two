@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from ....application.use_cases.metrics_use_case import GetAverageExecutionTimeUseCase
+from ....domain.repositories import ServiceOrderRepository
 from ....presentation.dependencies.auth_dependencies import get_current_user
 from ....presentation.dependencies.db_dependencies import get_service_order_repository
 from ....presentation.schemas.admin_schema import AverageExecutionTimeResponse
@@ -13,7 +14,9 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-ServiceOrderRepo = Annotated[object, Depends(get_service_order_repository)]
+ServiceOrderRepo = Annotated[
+    ServiceOrderRepository, Depends(get_service_order_repository)
+]
 
 
 @router.get("/average-execution-time")

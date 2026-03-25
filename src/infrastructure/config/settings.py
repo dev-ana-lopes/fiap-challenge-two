@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _parse_csv_or_json_list(value: str | list[str]) -> list[str]:
@@ -55,7 +55,6 @@ def _looks_like_placeholder(value: str) -> bool:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
@@ -66,7 +65,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "test", "staging", "production"] = "development"
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False
-    CORS_ALLOWED_ORIGINS: list[str] = Field(
+    EMAIL_PROVIDER: Literal["SMTP", "NOOP"] = "SMTP"
+    CORS_ALLOWED_ORIGINS: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost",
             "http://localhost:3000",
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
         ]
     )
     CORS_ALLOW_CREDENTIALS: bool = True
-    TRUSTED_HOSTS: list[str] = Field(default_factory=lambda: ["*"])
+    TRUSTED_HOSTS: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
     DATABASE_URL: str
     APP_BASE_URL: str = "http://localhost:8000"
     SMTP_HOST: str = "mailhog"
@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: str) -> str:
         return value.upper()
 
+    @field_validator("EMAIL_PROVIDER", mode="before")
+    @classmethod
+    def normalize_email_provider(cls, value: str) -> str:
+        return value.upper()
+
     @model_validator(mode="after")
     def validate_configuration(self) -> "Settings":
         self.JWT_SECRET = _resolve_secret(
@@ -128,33 +133,6 @@ class Settings(BaseSettings):
             self.SMTP_PASSWORD_FILE,
             "SMTP_PASSWORD",
         )
-
-        if (
-            self.SMTP_USE_AUTH
-            and not self.SMTP_USERNAME
-            and self.ENVIRONMENT
-            in {
-                "staging",
-                "production",
-            }
-        ):
-            raise ValueError(
-                "SMTP_USERNAME is required when SMTP_USE_AUTH=true in staging/production"
-            )
-
-        if (
-            self.SMTP_USE_AUTH
-            and not self.SMTP_PASSWORD
-            and self.ENVIRONMENT
-            in {
-                "staging",
-                "production",
-            }
-        ):
-            raise ValueError(
-                "SMTP_PASSWORD or SMTP_PASSWORD_FILE is required when "
-                "SMTP_USE_AUTH=true in staging/production"
-            )
 
         if self.ENVIRONMENT in {"staging", "production"}:
             if len(self.JWT_SECRET) < 32 or _looks_like_placeholder(self.JWT_SECRET):
@@ -180,18 +158,6 @@ class Settings(BaseSettings):
             if _looks_like_placeholder(self.APP_BASE_URL):
                 raise ValueError(
                     "APP_BASE_URL must point to the real public API address in "
-                    "staging/production"
-                )
-
-            if self.SMTP_HOST in {"", "localhost", "mailhog"}:
-                raise ValueError(
-                    "SMTP_HOST must point to a real SMTP provider in "
-                    "staging/production"
-                )
-
-            if not self.SMTP_FROM_EMAIL or _looks_like_placeholder(self.SMTP_FROM_EMAIL):
-                raise ValueError(
-                    "SMTP_FROM_EMAIL must be configured with a real sender address in "
                     "staging/production"
                 )
 

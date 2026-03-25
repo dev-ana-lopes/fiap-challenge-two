@@ -7,6 +7,7 @@ import pytest
 
 from src.domain.services import ApprovalRequestEmailMessage
 from src.infrastructure.config.settings import Settings
+from src.infrastructure.email.noop_client import NoopEmailSender
 from src.infrastructure.email.smtp_client import SmtpEmailSender
 
 
@@ -145,3 +146,20 @@ async def test_smtp_sender_builds_approval_request_email(monkeypatch):
         "https://api.example.com/public/service-orders/so-123/"
         "approval?token=reject-token" in body
     )
+
+
+@pytest.mark.asyncio
+async def test_noop_email_sender_accepts_runtime_calls():
+    sender = NoopEmailSender()
+    message = ApprovalRequestEmailMessage(
+        customer_email="customer@example.com",
+        service_order_id="so-123",
+        total=150.5,
+        summary_lines=("Servico: Revisao - R$ 100.00",),
+        approve_token="approve-token",
+        reject_token="reject-token",
+    )
+
+    await sender.send_email("customer@example.com", "Subject", "Body")
+    await sender.send_status_changed("customer@example.com", "so-123", "IN_PROGRESS")
+    await sender.send_approval_request(message)
