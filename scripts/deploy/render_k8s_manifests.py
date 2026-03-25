@@ -84,6 +84,7 @@ def render_static_manifests(
         content = content.replace("namespace: service-order", f"namespace: {namespace}")
         content = content.replace("name: service-order\n", f"name: {namespace}\n", 1)
         content = content.replace("__API_IMAGE__", image)
+        content = content.replace("${API_IMAGE}", image)
         (output_dir / manifest_name).write_text(content, encoding="utf-8")
 
 
