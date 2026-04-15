@@ -77,7 +77,6 @@ Referências:
 
 - Docker Desktop com Compose v2;
 - Python 3.12;
-- Poetry 1.7+;
 - Terraform 1.5+;
 - `make` é opcional, mas recomendado.
 

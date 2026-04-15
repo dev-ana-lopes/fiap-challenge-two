@@ -4,21 +4,19 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV POETRY_VIRTUALENVS_CREATE=false
-ENV POETRY_NO_INTERACTION=1
+ENV UV_LINK_MODE=copy
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry==1.7.0
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml uv.lock ./
 
-RUN poetry config virtualenvs.create false && \
-    poetry install --only main --no-root && \
-    rm -rf ~/.cache/pypoetry
+RUN uv sync --locked --no-dev --no-install-project
 
 
 FROM python:3.12-slim
@@ -27,17 +25,17 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV POETRY_VIRTUALENVS_CREATE=false
-ENV POETRY_NO_INTERACTION=1
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    adduser \
     curl \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
-    && addgroup --system app \
-    && adduser --system --ingroup app app
+    && /usr/sbin/addgroup --system app \
+    && /usr/sbin/adduser --system --ingroup app app
 
-COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 RUN chmod +x ./scripts/docker/entrypoint.sh && \
