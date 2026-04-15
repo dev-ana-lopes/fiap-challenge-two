@@ -31,23 +31,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: uv
 
-      - name: Install Poetry
-        run: pip install poetry==1.7.0
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Install dependencies
-        run: poetry install
+        run: uv sync --locked --dev
 
       - name: Lint
         run: |
-          poetry run black --check src tests
-          poetry run isort --check-only src tests
-          poetry run flake8 src tests
+          uv run black --check src tests
+          uv run isort --check-only src tests
+          uv run flake8 src tests
 
       - name: Test with coverage
         run: |
-          poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml
+          uv run pytest --cov=src --cov-report=term-missing --cov-report=xml
 
   deploy-production:
     needs: validate

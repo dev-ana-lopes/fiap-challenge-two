@@ -33,45 +33,45 @@ help:
 	@echo "  make clean            Remove generated artifacts"
 
 install:
-	poetry install
+	uv sync
 
 dev-install:
-	poetry install
+	uv sync --dev
 
 format:
-	poetry run black src tests
-	poetry run isort src tests
+	uv run black src tests
+	uv run isort src tests
 
 lint:
-	poetry run black --check src tests
-	poetry run isort --check-only src tests
-	poetry run flake8 src tests
+	uv run black --check src tests
+	uv run isort --check-only src tests
+	uv run flake8 src tests
 
 test:
-	poetry run pytest -q
+	uv run pytest -q
 
 test-cov:
-	poetry run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html
+	uv run pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html
 	@echo "Coverage reports generated in coverage.xml and htmlcov/index.html"
 
 test-integration:
-	INTEGRATION_TESTS_ENABLED=true poetry run pytest -q -m integration
+	INTEGRATION_TESTS_ENABLED=true uv run pytest -q -m integration
 
 migrate:
-	poetry run alembic -c alembic/alembic.ini upgrade head
+	uv run alembic -c alembic/alembic.ini upgrade head
 
 migrate-create:
 	@read -p "Enter migration name: " name; \
-	poetry run alembic -c alembic/alembic.ini revision --autogenerate -m "$$name"
+	uv run alembic -c alembic/alembic.ini revision --autogenerate -m "$$name"
 
 migrate-down:
-	poetry run alembic -c alembic/alembic.ini downgrade -1
+	uv run alembic -c alembic/alembic.ini downgrade -1
 
 run:
-	poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000
+	uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 
 run-dev:
-	poetry run uvicorn src.main:app --reload
+	uv run uvicorn src.main:app --reload
 
 compose-up:
 	docker compose --env-file .env up -d --build
