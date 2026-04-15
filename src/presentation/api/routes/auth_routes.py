@@ -8,8 +8,7 @@ from ....application.use_cases.auth_use_case import (
     RegisterUserUseCase,
 )
 from ....domain.repositories.user_repository import UserRepository
-from ....infrastructure.email.jwt_service import JwtService
-from ....infrastructure.email.password_hasher import PasswordHasher
+from ....domain.services import AccessTokenService, PasswordHashService
 from ....presentation.dependencies.db_dependencies import (
     get_jwt_service,
     get_password_hasher,
@@ -29,7 +28,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def register(
     request: RegisterRequest,
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    password_hasher: Annotated[PasswordHashService, Depends(get_password_hasher)],
 ) -> RegisterResponse:
     existing = await user_repo.get_by_email(request.email)
     if existing is not None:
@@ -47,8 +46,8 @@ async def _authenticate(
     email: str,
     password: str,
     user_repo: UserRepository,
-    password_hasher: PasswordHasher,
-    jwt_service: JwtService,
+    password_hasher: PasswordHashService,
+    jwt_service: AccessTokenService,
 ) -> LoginResponse:
     dto = LoginDTO(email=email, password=password)
     use_case = AuthenticateUserUseCase(user_repo, password_hasher, jwt_service)
@@ -65,8 +64,8 @@ async def _authenticate(
 async def login(
     request: LoginRequest,
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
-    jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
+    password_hasher: Annotated[PasswordHashService, Depends(get_password_hasher)],
+    jwt_service: Annotated[AccessTokenService, Depends(get_jwt_service)],
 ) -> LoginResponse:
     return await _authenticate(
         request.email,
@@ -81,8 +80,8 @@ async def login(
 async def token(
     request: Request,
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
-    jwt_service: Annotated[JwtService, Depends(get_jwt_service)],
+    password_hasher: Annotated[PasswordHashService, Depends(get_password_hasher)],
+    jwt_service: Annotated[AccessTokenService, Depends(get_jwt_service)],
 ) -> LoginResponse:
     form = await request.form()
     return await _authenticate(
