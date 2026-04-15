@@ -11,7 +11,12 @@ from ...domain.repositories import (
     UserRepository,
     VehicleRepository,
 )
-from ...domain.services import ApprovalTokenService, EmailSender
+from ...domain.services import (
+    AccessTokenService,
+    ApprovalTokenService,
+    EmailSender,
+    PasswordHashService,
+)
 from ...infrastructure.config.settings import Settings, get_settings
 from ...infrastructure.database.repositories.catalog_service_repository import (
     PostgresCatalogServiceRepository,
@@ -134,9 +139,9 @@ def get_approval_token_service(
 
 def get_jwt_service(
     settings: Settings = Depends(get_settings),
-) -> JwtService:
+) -> AccessTokenService:
     return JwtService(settings)
 
 
-def get_password_hasher() -> PasswordHasher:
+def get_password_hasher() -> PasswordHashService:
     return PasswordHasher()

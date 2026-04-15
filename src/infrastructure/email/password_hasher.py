@@ -1,9 +1,11 @@
 from passlib.context import CryptContext
 
+from ...domain.services import PasswordHashService
+
 password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
-class PasswordHasher:
+class PasswordHasher(PasswordHashService):
     @staticmethod
     def hash_password(password: str) -> str:
         return password_context.hash(password)

@@ -2,9 +2,8 @@ from uuid import uuid4
 
 from ...domain.entities import User
 from ...domain.repositories import UserRepository
+from ...domain.services import AccessTokenService, PasswordHashService
 from ...domain.time import utcnow
-from ...infrastructure.email.jwt_service import JwtService
-from ...infrastructure.email.password_hasher import PasswordHasher
 from ..dto.login_dto import LoginDTO
 
 
@@ -12,8 +11,8 @@ class AuthenticateUserUseCase:
     def __init__(
         self,
         user_repo: UserRepository,
-        password_hasher: PasswordHasher,
-        jwt_service: JwtService,
+        password_hasher: PasswordHashService,
+        jwt_service: AccessTokenService,
     ):
         self.user_repo = user_repo
         self.password_hasher = password_hasher
@@ -36,7 +35,7 @@ class RegisterUserUseCase:
     def __init__(
         self,
         user_repo: UserRepository,
-        password_hasher: PasswordHasher,
+        password_hasher: PasswordHashService,
     ):
         self.user_repo = user_repo
         self.password_hasher = password_hasher

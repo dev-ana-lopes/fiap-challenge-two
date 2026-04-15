@@ -3,11 +3,12 @@ from typing import Any
 
 from jose import JWTError, jwt
 
+from ...domain.services import AccessTokenService
 from ...domain.time import utcnow
 from ..config.settings import Settings
 
 
-class JwtService:
+class JwtService(AccessTokenService):
     def __init__(self, settings: Settings):
         self.settings = settings
 
