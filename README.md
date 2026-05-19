@@ -264,19 +264,54 @@ Os cenários cobrem:
 
 ## Kubernetes
 
-Os manifestos mínimos estão em `k8s/`:
+**Primary deployment target: Kubernetes (single-node k3s on EC2)**
 
-- `namespace.yaml`
-- `configmap.yaml`
-- `secret.template.yaml`
-- `job-migrate.yaml`
-- `deployment.yaml`
-- `service.yaml`
-- `hpa.yaml`
+All production deployments use Kubernetes manifests applied via CI/CD pipeline. Docker Compose is reserved for **local development only** and as a **fallback procedure**.
 
-### Deploy manual em `k3s`
+The manifests are minimal but complete, stored in `k8s/`:
 
-Monte um arquivo no mesmo formato do segredo `K8S_APP_ENV`:
+- `namespace.yaml` — service-order namespace
+- `configmap.yaml` — non-sensitive configuration (rendered at deploy time)
+- `secret.yaml` — sensitive secrets (rendered at deploy time)
+- `job-migrate.yaml` — Alembic database migrations (runs before deployment)
+- `deployment.yaml` — main API deployment (2 replicas, probes, resource limits)
+- `service.yaml` — ClusterIP service (port 80 → 8000)
+- `hpa.yaml` — horizontal pod autoscaler (2-5 replicas, 70% CPU target)
+
+### Deployment Architecture
+
+```
+.env.prod (secrets)
+    ↓
+prepare_env.py (validation)
+    ↓
+render_k8s_manifests.py (template rendering)
+    ↓
+kubectl apply (namespace → config → secret → migration job → deployment → service → hpa)
+    ↓
+kubectl wait (migration job)
+    ↓
+kubectl rollout status (deployment readiness)
+```
+
+### Deploy via CI/CD (Automatic - PREFERRED)
+
+The GitHub Actions workflow automatically:
+
+1. Validates code (lint, tests, K8s manifest rendering)
+2. Builds and pushes Docker image to GHCR
+3. Connects to the EC2 host via SSH
+4. Recreates `.env.prod` on EC2 from `APP_ENV_PROD`
+5. Renders K8s manifests on EC2 and applies resources in order (namespace → config → secret → migration → deployment → service → hpa)
+6. Monitors rollout and provides detailed diagnostics from inside the EC2 host
+
+**Triggers:** Push to `main` branch or manual `workflow_dispatch`
+
+**Requirements:** GitHub environment secrets/vars for EC2 SSH access and production config
+
+### Deploy Manual (If Needed)
+
+Create environment file (`k8s.env`):
 
 ```env
 APP_NAME=service-order-api
@@ -297,56 +332,97 @@ APPROVAL_TOKEN_TTL_MINUTES=60
 HEALTHCHECK_TIMEOUT_SECONDS=5
 ```
 
-Renderize os manifests:
+Validate environment:
+
+```bash
+python3 scripts/deploy/prepare_env.py k8s.env
+```
+
+Render manifests:
 
 ```bash
 python3 scripts/deploy/render_k8s_manifests.py \
   --env-file k8s.env \
-  --output-dir .tmp/rendered-k8s \
+  --output-dir .rendered-k8s \
   --image ghcr.io/<owner>/service-order-api:sha-<commit>
 ```
 
-Aplique no host com `k3s`:
+Apply to cluster (in order, on the EC2 host that runs `k3s`):
 
 ```bash
-kubectl apply -f .tmp/rendered-k8s/namespace.yaml
-kubectl apply -f .tmp/rendered-k8s/configmap.rendered.yaml -f .tmp/rendered-k8s/secret.rendered.yaml
+# 1. Namespace and configuration
+kubectl apply -f .rendered-k8s/namespace.yaml
+kubectl apply -f .rendered-k8s/configmap.rendered.yaml -f .rendered-k8s/secret.rendered.yaml
+
+# 2. Database migration
 kubectl delete job -n service-order service-order-api-migrate --ignore-not-found
-kubectl apply -f .tmp/rendered-k8s/job-migrate.yaml
+kubectl apply -f .rendered-k8s/job-migrate.yaml
 kubectl wait --for=condition=complete job/service-order-api-migrate -n service-order --timeout=300s
-kubectl apply -f .tmp/rendered-k8s/deployment.yaml -f .tmp/rendered-k8s/service.yaml -f .tmp/rendered-k8s/hpa.yaml
+
+# 3. Application deployment
+kubectl apply -f .rendered-k8s/deployment.yaml -f .rendered-k8s/service.yaml -f .rendered-k8s/hpa.yaml
 kubectl rollout status deployment/service-order-api -n service-order --timeout=300s
 ```
 
-### Kubernetes local com `k3d`
-
-Para rodar localmente com `k3d`, use sempre os manifests renderizados e uma imagem explícita do GHCR. O package `ghcr.io/<owner>/service-order-api` precisa estar público para o cluster fazer pull anônimo; se ele continuar privado, os pods vão falhar com `401 Unauthorized`.
-
-O arquivo [k8s.local.env](/mnt/c/fiap-challenge-two/k8s.local.env) já aponta o `DATABASE_URL` para `host.k3d.internal:5432`, reaproveitando o PostgreSQL do host.
-
-Quando o schema local já estiver atualizado, faça o deploy sem rodar o Job de migrations:
-
-```bash
-chmod +x scripts/deploy/apply_k8s_local.sh
-./scripts/deploy/apply_k8s_local.sh \
-  --image ghcr.io/<owner>/service-order-api:sha-<commit> \
-  --env-file k8s.local.env \
-  --run-migrations=false
-```
-
-Se você quiser forçar o Job localmente:
-
-```bash
-./scripts/deploy/apply_k8s_local.sh \
-  --image ghcr.io/<owner>/service-order-api:sha-<commit> \
-  --env-file k8s.local.env \
-  --run-migrations=true
-```
-
-Validação dos manifestos:
+### Validate Manifests Locally
 
 ```bash
 make k8s-validate
+```
+
+This renders manifests in a temporary directory and checks:
+- No unresolved image placeholders
+- No empty image fields
+- ConfigMap and Secret properly templated
+- All YAML syntax valid
+
+### Kubernetes on Local `k3d` (Optional Development)
+
+To test K8s manifests locally with `k3d` before pushing:
+
+```bash
+# Ensure image is public on GHCR (or import into k3d)
+k3d cluster create demo
+k3d image import ghcr.io/<owner>/service-order-api:sha-<commit>
+
+# Use local env file
+python3 scripts/deploy/prepare_env.py k8s.local.env
+python3 scripts/deploy/render_k8s_manifests.py \
+  --env-file k8s.local.env \
+  --output-dir .rendered-k8s \
+  --image ghcr.io/<owner>/service-order-api:sha-<commit>
+
+# Apply manifests
+kubectl apply -f .rendered-k8s/namespace.yaml
+# ... (follow manual deploy steps above)
+```
+
+### Image Pull Strategy
+
+**Current:** `imagePullPolicy: IfNotPresent`
+- Optimized for single-node K3s (image is pre-built and available locally)
+- After successful push to GHCR, Docker daemon on EC2 has the image cached
+
+**Future (Multi-node expansion):** Consider changing to `Always` with imagePullSecrets for registry authentication.
+
+### Load Testing with HPA
+
+Verify horizontal pod autoscaling with Locust:
+
+```bash
+# Deploy to k3s (via CI/CD or manual)
+# Monitor HPA status
+kubectl get hpa -n service-order -w
+
+# Run load test
+export LOCUST_HOST=http://<ec2-public-ip>
+cd locust && locust -f locustfile.py --users 100 --spawn-rate 10
+```
+
+Watch pods scale up in real-time:
+
+```bash
+kubectl get pods -n service-order -w
 ```
 
 ## Terraform
@@ -384,35 +460,94 @@ Notas:
 - override recomendado para demo de HPA mais agressivo: `t3.medium`;
 - a porta `8000` do fallback legado só é aberta se `enable_legacy_compose_port=true`.
 
-## CI/CD
+## CI/CD Pipeline
 
-O workflow [.github/workflows/ci-cd.yml](/mnt/c/fiap-challenge-two/.github/workflows/ci-cd.yml) cobre:
+**Primary deployment target: Kubernetes (k3s)**
 
-- lint com `black`, `isort` e `flake8`;
-- testes unitários e de API;
-- cobertura;
-- testes de integração com PostgreSQL real;
-- build da imagem Docker;
-- smoke test de `docker-compose`;
-- E2E local de recusa por e-mail com MailHog;
-- `terraform fmt -check` e `terraform validate`;
-- validação dos manifestos Kubernetes;
-- publicação da imagem no GHCR;
-- deploy `k3s` por `workflow_dispatch`;
-- fallback legado `compose-legacy` por `workflow_dispatch`.
+The GitHub Actions workflow ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml)) is structured in **three stages**:
 
-### Secrets esperados
+### Stage 1: Validation (ubuntu-latest)
+- Code quality (lint with `black`, `isort`, `flake8`)
+- Unit tests and API tests
+- Code coverage
+- Integration tests with real PostgreSQL
+- Terraform validation (`terraform fmt -check`, `terraform validate`)
+- **Kubernetes manifest validation** (rendering, placeholder checks, image verification)
 
-Deploy em `k3s`:
+### Stage 2: Build & Publish (ubuntu-latest)
+- Checkout repository
+- Build Docker image
+- Authenticate to GitHub Container Registry (GHCR)
+- Push image with tag: `ghcr.io/<owner>/service-order-api:sha-<commit>`
 
-- `K8S_DEPLOY_HOST`
-- `K8S_DEPLOY_USER`
-- `K8S_DEPLOY_SSH_KEY`
-- `K8S_APP_ENV`
+### Stage 3: Deploy to Kubernetes (ubuntu-latest + SSH to EC2)
+- Connect to EC2 via SSH (`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, optional `EC2_PORT`)
+- Recreate production environment file (`.env.prod`) on EC2 from `APP_ENV_PROD`
+- Validate and normalize environment on EC2
+- **Render Kubernetes manifests on EC2** with explicit GHCR image
+- **Apply resources in order on EC2:** Namespace → ConfigMap/Secret → Migration Job → Deployment → Service → HPA
+- **Wait for migrations** to complete
+- **Verify deployment rollout** and collect diagnostics from inside EC2 (`kubectl`)
 
-Fallback legado:
+### Workflow Triggers
+- `pull_request`: Validation only (no deploy)
+- `push` to `main`: Full pipeline (validate → build → deploy)
+- `workflow_dispatch`: Manual trigger for urgent deployments
 
-- `APP_ENV_PROD`
+### Required Secrets (GitHub Environments)
+
+**Production environment (required for deploy):**
+- `APP_ENV_PROD` — Production environment file containing all secrets:
+  - `DATABASE_URL` (PostgreSQL connection string)
+  - `JWT_SECRET` (JWT signing key)
+  - `APPROVAL_TOKEN_SECRET` (Token signing key)
+  - `SMTP_*` (optional, if SMTP provider enabled)
+  - All other required config from [.env.example](.env.example)
+- `EC2_SSH_KEY` — Private SSH key for remote deploy host access
+
+**Production variables (required for deploy):**
+- `EC2_HOST` — Public host/IP of EC2 running `k3s`
+- `EC2_USER` — SSH user (for example `ec2-user`)
+- `EC2_PORT` (optional) — SSH port (default: `22`)
+
+**Auto-provided by GitHub:**
+- `GITHUB_TOKEN` — For GHCR authentication (runner and EC2 remote login)
+
+### Workflow Structure
+
+```
+Pull Request → Validate (lint, test, K8s validation) ✓
+    ↓
+Push to main → Validate ✓ → Build & Push (GHCR) ✓ → Remote Deploy on EC2 (k3s) ✓
+    ↓
+    ├─ Namespace + Config/Secret
+    ├─ Migration Job (wait for completion)
+    └─ Deployment + Service + HPA (monitor rollout)
+```
+
+### Docker Compose in CI/CD (Legacy)
+
+Docker Compose is preserved for:
+- **Local development** (`make compose-up`)
+- **Manual fallback** (documented in [README.deploy.md](README.deploy.md))
+
+**Not** part of the automated CI/CD pipeline for production.
+
+### Viewing Workflow Details
+
+Check workflow runs and logs at:
+```
+https://github.com/<owner>/<repo>/actions/workflows/ci-cd-k8s-primary.yml
+```
+
+Steps are clearly labeled:
+- `Checkout repository`
+- `Compute container image reference`
+- `Build and push Docker image to GHCR`
+- `Setup SSH private key`
+- `Add EC2 host to known_hosts`
+- `Sync repository to EC2 app directory`
+- `Deploy via SSH on EC2 host (k3s)`
 
 ## Endpoints principais
 
@@ -454,7 +589,7 @@ Fluxos públicos:
 
 1. provisionar a infraestrutura com Terraform;
 2. publicar a imagem no GHCR;
-3. disparar o workflow com `deployment_target=k3s`;
+3. disparar o workflow `ci-cd-k8s-primary` (push em `main` ou `workflow_dispatch`);
 4. validar `/health` e `/health/ready` na EC2;
 5. abrir ordens de serviço e consultar a listagem ativa;
 6. executar Locust apontando para a URL pública;

@@ -139,5 +139,5 @@ variable "db_allocated_storage" {
 variable "db_engine_version" {
   type        = string
   description = "Versao do PostgreSQL."
-  default     = "16.3"
+  default     = "16.10"
 }

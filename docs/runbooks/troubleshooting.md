@@ -57,7 +57,98 @@ Produção:
 - testar conectividade de saída da EC2 para o provedor SMTP
 - revisar logs da API
 
-## CI falha no publish
+## Kubernetes Troubleshooting
+
+### Pods em CrashLoopBackOff
+
+```bash
+kubectl logs -n service-order -l app=service-order-api --tail=100
+
+kubectl describe pod <pod-name> -n service-order
+
+kubectl get pods -n service-order -o wide
+```
+
+Causas comuns:
+
+- `DATABASE_URL` inválida ou inacessível
+- Secrets não encontradas no namespace (`JWT_SECRET`, `APPROVAL_TOKEN_SECRET`)
+- Image não disponível no registry
+- Probe de readiness falhando (veja `/health/ready`)
+
+### Pods em ImagePullBackOff
+
+```bash
+
+kubectl describe pod <pod-name> -n service-order
+
+docker pull ghcr.io/<owner>/service-order-api:sha-<commit>
+
+kubectl get secret -n service-order | grep ghcr
+```
+
+### Migration Job Falhando
+
+```bash
+kubectl describe job service-order-api-migrate -n service-order
+
+kubectl logs job/service-order-api-migrate -n service-order --all-containers=true
+
+kubectl run -it --rm debug --image=busybox --restart=Never -- \
+  sh -c "nc -zv <database-host> 5432"
+```
+
+Causas comuns:
+
+- `DATABASE_URL` inválida ou incompleta
+- Banco de dados não acessível da EC2/cluster
+- Schema já existe e migration falha
+- Alembic versioning corrompido
+
+### Service não acessível
+
+```bash
+
+kubectl get endpoints -n service-order -o wide
+
+kubectl port-forward -n service-order svc/service-order-api 8000:80
+
+curl http://localhost:8000/health
+```
+
+### Health check falhando
+
+```bash
+kubectl logs deployment/service-order-api -n service-order --tail=100
+
+kubectl exec -it <pod-name> -n service-order -- curl http://localhost:8000/health
+
+kubectl get pod <pod-name> -n service-order -o yaml | grep -A 10 "readinessProbe\|livenessProbe"
+```
+
+### HPA não está escalando
+
+```bash
+
+kubectl get hpa -n service-order
+
+kubectl top pod -n service-order
+kubectl top node
+
+kubectl get deployment metrics-server -n kube-system
+```
+
+Causas comuns:
+
+- Metrics Server não instalado (Kubernetes padrão, mas k3s já vem com)
+- Resource requests não definidos na Deployment
+- CPU usage abaixo de 70%
+
+---
+
+## CI/CD Troubleshooting
+
+### CI falha no publish
 
 Verificações:
 
