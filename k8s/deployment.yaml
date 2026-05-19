@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: ${API_IMAGE}
+          image: __API_IMAGE__
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

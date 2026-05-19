@@ -2,107 +2,98 @@
 
 ## Objetivo
 
-Subir a aplicação em uma EC2 com Docker Compose usando PostgreSQL no RDS.
+Executar deploy de produção da API com Kubernetes (`k3s`) na EC2 e PostgreSQL no RDS.
+
+## Fluxo oficial (primário)
+
+- Build e push da imagem no GHCR via GitHub Actions
+- Conexão SSH do runner na EC2
+- Execução de `prepare_env.py`, render de manifests e `kubectl apply/wait/rollout` dentro da EC2
 
 ## Pré-requisitos
 
 - Infra criada pelo Terraform em `infra/`
-- Acesso SSH à EC2
-- Repositório disponível na EC2
-- `.env.prod` preenchido
-- Imagem local (`service-order-api:local`) ou imagem publicada em registry
+- EC2 com `k3s`, `kubectl`, `docker` e acesso ao RDS
+- Acesso SSH da pipeline para a EC2
+- Repositório disponível em `/opt/service-order-api` na EC2 (sincronizado no workflow)
 
-## Passo a passo
+## Configuração do GitHub (produção)
 
-### 1. Provisionar infraestrutura
+### Secrets
 
-```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
+- `APP_ENV_PROD` (conteúdo do `.env.prod`)
+- `EC2_SSH_KEY` (chave privada SSH)
 
-### 2. Conectar na EC2
+### Variables
+
+- `EC2_HOST` (IP/DNS público da EC2)
+- `EC2_USER` (ex.: `ec2-user`)
+- `EC2_PORT` (opcional, default `22`)
+
+## Pipeline de deploy Kubernetes (CI/CD)
+
+1. `validate` (PR/push): lint, testes, validação de render de manifests
+2. `build-publish` (push/main): build + push para `ghcr.io/<owner>/service-order-api:sha-<commit_sha>`
+3. `deploy-k8s-ec2` (push/main): SSH na EC2 e execução do deploy no cluster local `k3s`
+
+## Passo a passo manual (contingência)
+
+Use este fluxo somente para operação assistida ou troubleshooting.
+
+### 1. Conectar na EC2
 
 ```bash
 ssh -i <key>.pem ec2-user@<ec2_public_ip>
 ```
 
-### 3. Bootstrap do host
+### 2. Preparar ambiente
 
 ```bash
-chmod +x scripts/deploy/bootstrap_ec2.sh
-./scripts/deploy/bootstrap_ec2.sh
-```
-
-### 4. Preparar configuração
-
-```bash
+cd /opt/service-order-api
 cp .env.prod.example .env.prod
-```
-
-Preencher:
-
-- `DATABASE_URL` com endpoint do RDS
-- `APP_BASE_URL`
-- `CORS_ALLOWED_ORIGINS`
-- `TRUSTED_HOSTS`
-- SMTP real
-- segredos JWT e approval token
-
-`CORS_ALLOWED_ORIGINS` e `TRUSTED_HOSTS` podem ser informados em CSV ou JSON array. No GitHub Actions, `scripts/deploy/prepare_env.py` valida e normaliza esses campos antes do deploy.
-
-Para validar localmente antes do release:
-
-```bash
+# preencher variáveis reais
 python3 scripts/deploy/prepare_env.py .env.prod
 ```
 
-### 5. Publicar ou buildar imagem
-
-Opção A, build local:
+### 3. Definir imagem do GHCR
 
 ```bash
-docker build -t service-order-api:local .
+export IMAGE_REF=ghcr.io/<owner>/service-order-api:sha-<commit_sha>
 ```
 
-Opção B, imagem de registry:
+### 4. Renderizar manifests com imagem explícita
 
 ```bash
-docker pull <registry>/service-order-api:<tag>
+python3 scripts/deploy/render_k8s_manifests.py \
+  --env-file .env.prod \
+  --output-dir .rendered-k8s \
+  --image "${IMAGE_REF}" \
+  --namespace service-order
 ```
 
-### 6. Executar release
+### 5. Aplicar recursos no `k3s`
 
 ```bash
-chmod +x scripts/deploy/release.sh
-API_IMAGE=service-order-api:local ./scripts/deploy/release.sh
+kubectl apply -f .rendered-k8s/namespace.yaml
+kubectl apply -f .rendered-k8s/configmap.rendered.yaml -f .rendered-k8s/secret.rendered.yaml
+
+kubectl delete job -n service-order service-order-api-migrate --ignore-not-found
+kubectl apply -f .rendered-k8s/job-migrate.yaml
+kubectl wait --for=condition=complete job/service-order-api-migrate -n service-order --timeout=300s
+
+kubectl apply -f .rendered-k8s/deployment.yaml -f .rendered-k8s/service.yaml -f .rendered-k8s/hpa.yaml
+kubectl rollout status deployment/service-order-api -n service-order --timeout=300s
 ```
 
-Se estiver usando registry:
+### 6. Validar pós-deploy
 
 ```bash
-API_IMAGE=<registry>/service-order-api:<tag> ./scripts/deploy/release.sh
+kubectl get all -n service-order -o wide
+kubectl get hpa -n service-order
+curl http://<ec2-public-ip>/health
+curl http://<ec2-public-ip>/health/ready
 ```
 
-### 7. Validar
+## Fallback legado (Docker Compose)
 
-```bash
-curl http://<host>:8000/health
-curl http://<host>:8000/health/ready
-curl http://<host>:8000/docs
-```
-
-## Rollback simples
-
-1. identificar a última tag funcional
-2. ajustar `API_IMAGE`
-3. executar novamente `scripts/deploy/release.sh`
-
-## Observações
-
-- o serviço `migrate` roda antes da API
-- o Compose de produção não usa `pull_policy: always`
-- o fluxo aceita imagem local ou tag publicada
+O fluxo Compose permanece apenas para contingência operacional. Para esse procedimento, consulte `README.deploy.md`.

@@ -3,7 +3,6 @@ name = "service-order-api"
 version = "1.0.0"
 description = "Service Order Management API for mechanical workshop system"
 authors = [{name = "Ana Lopes", email = "dev.anajulia@outlook.com.br"}]
-readme = "README.md"
 requires-python = ">=3.12,<4.0"
 dependencies = [
     "fastapi>=0.115.0,<0.116.0",

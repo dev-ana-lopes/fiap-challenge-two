@@ -1,4 +1,14 @@
-name: ci-cd-ec2-local
+# Primary CI/CD Pipeline: K8s-First Deployment
+# ================================================
+# This workflow validates, builds, and deploys to Kubernetes (single-node K3s).
+# Docker Compose is preserved only as a fallback/local development option.
+#
+# Workflow triggers: PR, push to main, manual dispatch
+# Primary deployment target: Kubernetes on EC2 host running K3s
+# Registry: GitHub Container Registry (GHCR)
+# Namespace: service-order (production)
+
+name: ci-cd-k8s-primary
 
 on:
   pull_request:
@@ -11,15 +21,26 @@ concurrency:
   group: production-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   PYTHON_VERSION: "3.12"
   APP_DIR: /opt/service-order-api
-  COMPOSE_FILE: docker-compose.prod.yml
-  COMPOSE_PROJECT_NAME: service-order-prod
   API_IMAGE_NAME: service-order-api
-  APP_HEALTH_URL: http://localhost:8000/health/ready
+  K8S_NAMESPACE: service-order
+  RENDERED_K8S_DIR: .rendered-k8s
+  MIGRATION_TIMEOUT_SECONDS: 300
+  DEPLOYMENT_TIMEOUT_SECONDS: 300
 
 jobs:
+  # ====================================================================
+  # STAGE 1: VALIDATION
+  # ====================================================================
+  # Runs on: ubuntu-latest (standard GitHub runner)
+  # Purpose: Lint code, run tests, validate K8s manifests
+  # ====================================================================
   validate:
     runs-on: ubuntu-latest
 
@@ -51,189 +72,205 @@ jobs:
         run: |
           uv run pytest --cov=src --cov-report=term-missing --cov-report=xml
 
-  deploy-production:
+      - name: Validate rendered Kubernetes manifests
+        run: |
+          set -euo pipefail
+
+          TMP_DIR="$(mktemp -d)"
+          ENV_FILE="${TMP_DIR}/k8s.env"
+          OUTPUT_DIR="${TMP_DIR}/rendered-k8s"
+          IMAGE_REF="ghcr.io/example/service-order-api:sha-test"
+
+          cat <<'EOF' > "${ENV_FILE}"
+          APP_NAME=service-order-api
+          APP_VERSION=2.1.0
+          ENVIRONMENT=production
+          LOG_LEVEL=INFO
+          LOG_JSON=true
+          EMAIL_PROVIDER=NOOP
+          DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/service_order_db
+          APP_BASE_URL=https://api.example.com
+          CORS_ALLOWED_ORIGINS=https://app.example.com
+          TRUSTED_HOSTS=api.example.com
+          JWT_SECRET=jwt-secret-for-tests
+          APPROVAL_TOKEN_SECRET=approval-secret-for-tests
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRATION_MINUTES=60
+          APPROVAL_TOKEN_TTL_MINUTES=60
+          HEALTHCHECK_TIMEOUT_SECONDS=5
+          EOF
+
+          python3 scripts/deploy/prepare_env.py "${ENV_FILE}"
+          python3 scripts/deploy/render_k8s_manifests.py \
+            --env-file "${ENV_FILE}" \
+            --output-dir "${OUTPUT_DIR}" \
+            --image "${IMAGE_REF}"
+
+          grep -F "image: ${IMAGE_REF}" "${OUTPUT_DIR}/deployment.yaml"
+          grep -F "image: ${IMAGE_REF}" "${OUTPUT_DIR}/job-migrate.yaml"
+          ! grep -R -n -E '\$\{API_IMAGE\}|__API_IMAGE__' "${OUTPUT_DIR}"
+          ! grep -R -n -E 'image:[[:space:]]*$' "${OUTPUT_DIR}/deployment.yaml" "${OUTPUT_DIR}/job-migrate.yaml"
+
+  # ====================================================================
+  # STAGE 2: BUILD & PUBLISH
+  # ====================================================================
+  # Runs on: ubuntu-latest (standard GitHub runner)
+  # Purpose: Build Docker image and push to GHCR
+  # Output: image_ref artifact consumed by deploy stage
+  # ====================================================================
+  build-publish:
     needs: validate
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, Linux, X64, prod]
-    environment: production
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_ref: ${{ steps.image-meta.outputs.image_ref }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Ensure app directory exists
-        run: mkdir -p "${{ env.APP_DIR }}"
-
-      - name: Sync files to app dir
+      - name: Compute container image reference
+        id: image-meta
         run: |
-          rsync -av --delete \
+          set -euo pipefail
+          REGISTRY_OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REF="ghcr.io/${REGISTRY_OWNER}/${{ env.API_IMAGE_NAME }}:sha-${GITHUB_SHA}"
+          echo "image_ref=${IMAGE_REF}" >> "${GITHUB_OUTPUT}"
+          echo "Using image: ${IMAGE_REF}"
+
+      - name: Authenticate to GitHub Container Registry
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and push Docker image to GHCR
+        run: |
+          set -euo pipefail
+          docker build -t "${{ steps.image-meta.outputs.image_ref }}" .
+          docker push "${{ steps.image-meta.outputs.image_ref }}"
+          echo "Image published: ${{ steps.image-meta.outputs.image_ref }}"
+
+  # ====================================================================
+  # STAGE 3: DEPLOY TO KUBERNETES (REMOTE EC2)
+  # ====================================================================
+  # Runs on: ubuntu-latest (standard GitHub runner)
+  # Purpose: Orchestrate remote deploy, but execute kubectl inside EC2 host
+  # Depends on: validate + build-publish
+  # ====================================================================
+  deploy-k8s-ec2:
+    needs: build-publish
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH private key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Add EC2 host to known_hosts
+        run: |
+          set -euo pipefail
+          ssh-keyscan -p "${{ vars.EC2_PORT || 22 }}" -H "${{ vars.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync repository to EC2 app directory
+        run: |
+          set -euo pipefail
+          ssh -p "${{ vars.EC2_PORT || 22 }}" "${{ vars.EC2_USER }}@${{ vars.EC2_HOST }}" "mkdir -p '${{ env.APP_DIR }}'"
+          rsync -az --delete \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '.venv' \
             --exclude '.env.prod' \
-            ./ "${{ env.APP_DIR }}/"
+            -e "ssh -p ${{ vars.EC2_PORT || 22 }}" \
+            ./ "${{ vars.EC2_USER }}@${{ vars.EC2_HOST }}:${{ env.APP_DIR }}/"
 
-      - name: Render production env
-        run: |
-          printf '%s' "${{ secrets.APP_ENV_PROD }}" > "${{ env.APP_DIR }}/.env.prod"
-
-      - name: Prepare production env
-        working-directory: ${{ env.APP_DIR }}
+      - name: Prepare production environment file
         run: |
           set -euo pipefail
+          printf '%s' "${{ secrets.APP_ENV_PROD }}" > .env.prod
+
+      - name: Transfer .env.prod to EC2
+        run: |
+          set -euo pipefail
+          rsync -az \
+            -e "ssh -p ${{ vars.EC2_PORT || 22 }}" \
+            .env.prod "${{ vars.EC2_USER }}@${{ vars.EC2_HOST }}:${{ env.APP_DIR }}/.env.prod"
+          rm -f .env.prod
+
+      - name: Deploy via SSH on EC2 host (k3s)
+        env:
+          IMAGE_REF: ${{ needs.build-publish.outputs.image_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          ssh -p "${{ vars.EC2_PORT || 22 }}" "${{ vars.EC2_USER }}@${{ vars.EC2_HOST }}" \
+            "IMAGE_REF='${IMAGE_REF}' GITHUB_TOKEN='${GITHUB_TOKEN}' GITHUB_ACTOR='${GITHUB_ACTOR}' APP_DIR='${{ env.APP_DIR }}' K8S_NAMESPACE='${{ env.K8S_NAMESPACE }}' RENDERED_K8S_DIR='${{ env.RENDERED_K8S_DIR }}' MIGRATION_TIMEOUT_SECONDS='${{ env.MIGRATION_TIMEOUT_SECONDS }}' DEPLOYMENT_TIMEOUT_SECONDS='${{ env.DEPLOYMENT_TIMEOUT_SECONDS }}' bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          cd "${APP_DIR}"
+
+          echo "Using .env.prod transferred from GitHub Actions secret APP_ENV_PROD..."
+
+          echo "Authenticating Docker to GHCR on EC2 host..."
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+          echo "Validating and normalizing environment..."
           python3 scripts/deploy/prepare_env.py .env.prod
 
-      - name: Prepare rollback tags
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-          if docker image inspect ${{ env.API_IMAGE_NAME }}:prod-current >/dev/null 2>&1; then
-            docker tag ${{ env.API_IMAGE_NAME }}:prod-current ${{ env.API_IMAGE_NAME }}:prod-previous
-          fi
+          echo "Rendering Kubernetes manifests with explicit image ${IMAGE_REF}..."
+          rm -rf "${RENDERED_K8S_DIR}"
+          python3 scripts/deploy/render_k8s_manifests.py \
+            --env-file .env.prod \
+            --output-dir "${RENDERED_K8S_DIR}" \
+            --image "${IMAGE_REF}" \
+            --namespace "${K8S_NAMESPACE}"
 
-      - name: Build image locally
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-          docker build -t ${{ env.API_IMAGE_NAME }}:${GITHUB_SHA} .
-          docker tag ${{ env.API_IMAGE_NAME }}:${GITHUB_SHA} ${{ env.API_IMAGE_NAME }}:prod-current
+          echo "=== Pre-deployment cluster state ==="
+          kubectl version --client
+          kubectl get nodes -o wide
+          kubectl get all -n "${K8S_NAMESPACE}" -o wide || echo "(namespace does not exist yet)"
 
-      - name: Pre-deploy diagnostics
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}'
-          echo
-          ss -ltnp | grep ':8000' || true
-          echo
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" ps || true
+          echo "Applying namespace, ConfigMap, and Secret..."
+          kubectl apply -f "${RENDERED_K8S_DIR}/namespace.yaml"
+          kubectl apply \
+            -f "${RENDERED_K8S_DIR}/configmap.rendered.yaml" \
+            -f "${RENDERED_K8S_DIR}/secret.rendered.yaml"
 
-      - name: Cleanup previous compose state
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" down --remove-orphans || true
+          echo "Running database migration job..."
+          kubectl delete job -n "${K8S_NAMESPACE}" service-order-api-migrate --ignore-not-found
+          kubectl apply -f "${RENDERED_K8S_DIR}/job-migrate.yaml"
+          kubectl wait \
+            --for=condition=complete \
+            job/service-order-api-migrate \
+            -n "${K8S_NAMESPACE}" \
+            --timeout="${MIGRATION_TIMEOUT_SECONDS}s"
 
-      - name: Remove legacy containers that may hold port 8000
-        run: |
-          set -euo pipefail
+          echo "Deploying API workload and waiting rollout..."
+          kubectl apply \
+            -f "${RENDERED_K8S_DIR}/deployment.yaml" \
+            -f "${RENDERED_K8S_DIR}/service.yaml" \
+            -f "${RENDERED_K8S_DIR}/hpa.yaml"
+          kubectl rollout status \
+            deployment/service-order-api \
+            -n "${K8S_NAMESPACE}" \
+            --timeout="${DEPLOYMENT_TIMEOUT_SECONDS}s"
 
-          for name in service-order-api-prod service-order-migrate-prod service-order-api-api-1; do
-            if docker ps -a --format '{{.Names}}' | grep -Fxq "$name"; then
-              docker rm -f "$name" || true
-            fi
-          done
-
-          PORT_CONTAINERS="$(docker ps -q --filter publish=8000 || true)"
-          if [ -n "${PORT_CONTAINERS}" ]; then
-            docker rm -f ${PORT_CONTAINERS} || true
-          fi
-
-      - name: Fail fast if port 8000 is still busy
-        run: |
-          set -euo pipefail
-          if ss -ltn '( sport = :8000 )' | grep -q ':8000'; then
-            echo "::error::Port 8000 is still in use before startup."
-            ss -ltnp | grep ':8000' || true
-            docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}'
-            exit 1
-          fi
-
-      - name: Run migrations
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-          API_IMAGE=${{ env.API_IMAGE_NAME }}:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" run --rm migrate
-
-      - name: Start application
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-          API_IMAGE=${{ env.API_IMAGE_NAME }}:${GITHUB_SHA} \
-          APP_ENV_FILE=.env.prod \
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" up -d --remove-orphans api
-
-      - name: Wait for Docker healthcheck
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-
-          CONTAINER_ID="$(docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" ps -q api)"
-          if [ -z "${CONTAINER_ID}" ]; then
-            echo "::error::API container was not created."
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" ps || true
-            exit 1
-          fi
-
-          echo "Container ID: ${CONTAINER_ID}"
-
-          for i in $(seq 1 24); do
-            STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${CONTAINER_ID}" 2>/dev/null || true)"
-            echo "Attempt ${i}/24 - status: ${STATUS}"
-
-            if [ "${STATUS}" = "healthy" ]; then
-              exit 0
-            fi
-
-            if [ "${STATUS}" = "unhealthy" ] || [ "${STATUS}" = "exited" ] || [ "${STATUS}" = "dead" ]; then
-              echo "::error::Container became ${STATUS}."
-              docker logs "${CONTAINER_ID}" || true
-              docker inspect "${CONTAINER_ID}" || true
-              exit 1
-            fi
-
-            sleep 5
-          done
-
-          echo "::error::Container did not become healthy in time."
-          docker logs "${CONTAINER_ID}" || true
-          docker inspect "${CONTAINER_ID}" || true
-          exit 1
-
-      - name: External healthcheck with retry
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 12); do
-            echo "External healthcheck attempt ${i}/12"
-            if curl -fsS "${{ env.APP_HEALTH_URL }}" >/dev/null; then
-              echo "External healthcheck succeeded."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::External healthcheck failed after retries."
-          exit 1
-
-      - name: Rollback on failure
-        if: failure()
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          set -euo pipefail
-
-          echo "Deployment failed. Attempting rollback..."
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" down --remove-orphans || true
-
-          if docker image inspect ${{ env.API_IMAGE_NAME }}:prod-previous >/dev/null 2>&1; then
-            API_IMAGE=${{ env.API_IMAGE_NAME }}:prod-previous \
-            APP_ENV_FILE=.env.prod \
-            docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" up -d --remove-orphans api
-          else
-            echo "::warning::No prod-previous image available for rollback."
-          fi
-
-      - name: Show running containers and logs
-        if: always()
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          echo "== docker ps -a =="
-          docker ps -a
-          echo
-          echo "== compose ps =="
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" ps || true
-          echo
-          echo "== compose logs =="
-          docker compose -p "${{ env.COMPOSE_PROJECT_NAME }}" --env-file .env.prod -f "${{ env.COMPOSE_FILE }}" logs --tail=200 || true
-          echo
-          echo "== port 8000 usage =="
-          ss -ltnp | grep ':8000' || true
+          echo "=== Post-deployment checks ==="
+          kubectl get service -n "${K8S_NAMESPACE}" -o wide
+          kubectl get hpa -n "${K8S_NAMESPACE}"
+          kubectl get all -n "${K8S_NAMESPACE}" -o wide
+          kubectl describe job service-order-api-migrate -n "${K8S_NAMESPACE}"
+          kubectl logs job/service-order-api-migrate -n "${K8S_NAMESPACE}" --all-containers=true --tail=100 || true
+          kubectl describe deployment service-order-api -n "${K8S_NAMESPACE}"
+          kubectl get pods -n "${K8S_NAMESPACE}" -o wide
+          kubectl get endpoints -n "${K8S_NAMESPACE}" -o wide
+          REMOTE_SCRIPT
